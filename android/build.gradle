@@ -11,6 +11,14 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+    
+    // Workaround for older Flutter plugins (like app_links 6.4.1)
+    // that expect the old flutter.compileSdkVersion property.
+    project.ext.set("flutter", [
+        compileSdkVersion: 34,
+        minSdkVersion: 21,
+        targetSdkVersion: 34
+    ])
 }
 
 tasks.register("clean", Delete) {
