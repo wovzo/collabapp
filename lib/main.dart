@@ -1376,6 +1376,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String _email = '';
+  String _role = '';
 
   @override
   void initState() {
@@ -1387,9 +1388,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       setState(() => _email = user.email ?? '');
-      final data = await Supabase.instance.client.from('profiles').select('name').eq('id', user.id).maybeSingle();
-      if (data != null && data['name'] != null) {
-        setState(() => _nameController.text = data['name']);
+      final data = await Supabase.instance.client.from('profiles').select('name, role').eq('id', user.id).maybeSingle();
+      if (data != null) {
+        setState(() {
+          if (data['name'] != null) _nameController.text = data['name'];
+          if (data['role'] != null) _role = data['role'];
+        });
       }
     }
   }
@@ -1432,7 +1436,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 16),
             const Text('My Profile', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text(_email, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+            Text(_email, style: TextStyle(fontSize: 16, color: Colors.grey)),
+            if (_role.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.purple.shade200),
+                ),
+                child: Text(
+                  _role.toUpperCase(),
+                  style: TextStyle(color: Colors.purple.shade700, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+            ],
             const SizedBox(height: 32),
             
             TextField(
