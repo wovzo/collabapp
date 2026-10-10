@@ -734,14 +734,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
           ),
           const SizedBox(height: 16),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(Icons.check_circle_outline, size: 16, color: Colors.grey[500]),
               const SizedBox(width: 4),
-              Text(
-                requirements,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[600],
+              Expanded(
+                child: Text(
+                  requirements,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                  ),
                 ),
               ),
             ],
