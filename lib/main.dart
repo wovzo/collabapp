@@ -1375,11 +1375,49 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _nameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
+  // Profile state
   String _email = '';
-  String _role = '';
+  String _name = 'User';
+  String _role = 'influencer';
+  String _bio = 'Content creator & digital influencer 🚀';
+  String _niche = 'Fashion & Lifestyle';
+  String _instagram = '';
+  String _youtube = '';
+  String _location = 'India';
+  String _phone = '';
+  String _website = '';
+
+  // Stats
+  int _stat1 = 0;
+  int _stat2 = 0;
+  bool _isLoading = true;
+  bool _isSaving = false;
+  bool _isUpdatingPassword = false;
+
+  // Controllers for editing
+  final _nameController = TextEditingController();
+  final _bioController = TextEditingController();
+  final _nicheController = TextEditingController();
+  final _instagramController = TextEditingController();
+  final _youtubeController = TextEditingController();
+  final _locationController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _websiteController = TextEditingController();
+
+  // Password controllers
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  final List<String> _niches = [
+    'Fashion & Lifestyle',
+    'Tech & Gadgets',
+    'Fitness & Health',
+    'Beauty & Cosmetics',
+    'Food & Dining',
+    'Travel & Adventure',
+    'Gaming & Entertainment',
+    'Education & Business',
+  ];
 
   @override
   void initState() {
@@ -1387,116 +1425,941 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadProfile();
   }
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _bioController.dispose();
+    _nicheController.dispose();
+    _instagramController.dispose();
+    _youtubeController.dispose();
+    _locationController.dispose();
+    _phoneController.dispose();
+    _websiteController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadProfile() async {
+    setState(() => _isLoading = true);
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
-      setState(() => _email = user.email ?? '');
-      final data = await Supabase.instance.client.from('profiles').select('name, role').eq('id', user.id).maybeSingle();
-      if (data != null) {
-        setState(() {
-          if (data['name'] != null) _nameController.text = data['name'];
-          if (data['role'] != null) _role = data['role'];
-        });
+      _email = user.email ?? '';
+
+      // Load user metadata
+      final meta = user.userMetadata ?? {};
+      if (meta['bio'] != null && meta['bio'].toString().isNotEmpty) {
+        _bio = meta['bio'].toString();
       }
+      if (meta['niche'] != null && meta['niche'].toString().isNotEmpty) {
+        _niche = meta['niche'].toString();
+      }
+      if (meta['instagram'] != null) _instagram = meta['instagram'].toString();
+      if (meta['youtube'] != null) _youtube = meta['youtube'].toString();
+      if (meta['location'] != null && meta['location'].toString().isNotEmpty) {
+        _location = meta['location'].toString();
+      }
+      if (meta['phone'] != null) _phone = meta['phone'].toString();
+      if (meta['website'] != null) _website = meta['website'].toString();
+
+      // Query database profile
+      try {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('name, role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (data != null) {
+          if (data['name'] != null && data['name'].toString().trim().isNotEmpty) {
+            _name = data['name'].toString();
+          }
+          if (data['role'] != null && data['role'].toString().trim().isNotEmpty) {
+            _role = data['role'].toString();
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading profiles row: $e');
+      }
+
+      // Sync controllers
+      _nameController.text = _name;
+      _bioController.text = _bio;
+      _nicheController.text = _niche;
+      _instagramController.text = _instagram;
+      _youtubeController.text = _youtube;
+      _locationController.text = _location;
+      _phoneController.text = _phone;
+      _websiteController.text = _website;
+
+      // Query Stats
+      await _loadStats(user.id);
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _updateProfile() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadStats(String userId) async {
+    try {
+      if (_role == 'brand') {
+        final campaigns = await Supabase.instance.client
+            .from('campaigns')
+            .select('id')
+            .eq('brand_id', userId);
+        _stat1 = campaigns.length;
+
+        final apps = await Supabase.instance.client
+            .from('applications')
+            .select('id, campaigns!inner(brand_id)')
+            .eq('campaigns.brand_id', userId);
+        _stat2 = apps.length;
+      } else {
+        final apps = await Supabase.instance.client
+            .from('applications')
+            .select('id, status')
+            .eq('influencer_id', userId);
+        _stat1 = apps.length;
+        _stat2 = apps.where((a) => a['status'] == 'accepted').length;
+      }
+    } catch (e) {
+      debugPrint('Error loading stats: $e');
+    }
+  }
+
+  Future<void> _saveProfileChanges() async {
+    setState(() => _isSaving = true);
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        if (_nameController.text.isNotEmpty) {
-          await Supabase.instance.client.from('profiles').update({'name': _nameController.text.trim()}).eq('id', user.id);
+        final newName = _nameController.text.trim();
+        final newBio = _bioController.text.trim();
+        final newNiche = _nicheController.text.trim();
+        final newInsta = _instagramController.text.trim();
+        final newYt = _youtubeController.text.trim();
+        final newLoc = _locationController.text.trim();
+        final newPhone = _phoneController.text.trim();
+        final newWeb = _websiteController.text.trim();
+
+        // 1. Update profiles table
+        if (newName.isNotEmpty) {
+          await Supabase.instance.client.from('profiles').update({
+            'name': newName,
+          }).eq('id', user.id);
         }
-        if (_passwordController.text.isNotEmpty) {
-          await Supabase.instance.client.auth.updateUser(UserAttributes(password: _passwordController.text));
-        }
+
+        // 2. Update user metadata
+        await Supabase.instance.client.auth.updateUser(
+          UserAttributes(
+            data: {
+              'name': newName,
+              'bio': newBio,
+              'niche': newNiche,
+              'instagram': newInsta,
+              'youtube': newYt,
+              'location': newLoc,
+              'phone': newPhone,
+              'website': newWeb,
+            },
+          ),
+        );
+
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile Updated Successfully!')));
-          _passwordController.clear();
+          setState(() {
+            _name = newName;
+            _bio = newBio;
+            _niche = newNiche;
+            _instagram = newInsta;
+            _youtube = newYt;
+            _location = newLoc;
+            _phone = newPhone;
+            _website = newWeb;
+          });
+          Navigator.of(context).pop(); // Dismiss bottom sheet
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.green,
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Profile updated successfully!'),
+                ],
+              ),
+            ),
+          );
         }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text('Error updating profile: $e')),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void _showEditProfileBottomSheet() {
+    _nameController.text = _name;
+    _bioController.text = _bio;
+    _nicheController.text = _niche;
+    _instagramController.text = _instagram;
+    _youtubeController.text = _youtube;
+    _locationController.text = _location;
+    _phoneController.text = _phone;
+    _websiteController.text = _website;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Edit Profile',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Full Name / Brand Name',
+                        prefixIcon: Icon(Icons.person_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _bioController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Bio / Tagline',
+                        prefixIcon: Icon(Icons.info_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      value: _niches.contains(_nicheController.text) ? _nicheController.text : _niches.first,
+                      decoration: const InputDecoration(
+                        labelText: 'Category / Niche',
+                        prefixIcon: Icon(Icons.category_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _niches.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setModalState(() => _nicheController.text = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _instagramController,
+                      decoration: const InputDecoration(
+                        labelText: 'Instagram Handle (@username)',
+                        prefixIcon: Icon(Icons.camera_alt_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _youtubeController,
+                      decoration: InputDecoration(
+                        labelText: _role == 'brand' ? 'Company Website' : 'YouTube Channel / Link',
+                        prefixIcon: const Icon(Icons.link),
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _locationController,
+                      decoration: const InputDecoration(
+                        labelText: 'City / Location',
+                        prefixIcon: Icon(Icons.location_on_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Phone Number (Optional)',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isSaving ? null : _saveProfileChanges,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: _isSaving
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : const Text('Save Profile Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    _newPasswordController.clear();
+    _confirmPasswordController.clear();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.lock_reset, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('Change Password'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _newPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'New Password (min 6 chars)',
+                      prefixIcon: Icon(Icons.lock_outline),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _confirmPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Confirm Password',
+                      prefixIcon: Icon(Icons.lock_outline),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _isUpdatingPassword
+                      ? null
+                      : () async {
+                          if (_newPasswordController.text.length < 6) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password must be at least 6 characters')),
+                            );
+                            return;
+                          }
+                          if (_newPasswordController.text != _confirmPasswordController.text) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Passwords do not match')),
+                            );
+                            return;
+                          }
+                          setDialogState(() => _isUpdatingPassword = true);
+                          try {
+                            await Supabase.instance.client.auth.updateUser(
+                              UserAttributes(password: _newPasswordController.text),
+                            );
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  backgroundColor: Colors.green,
+                                  content: Text('Password changed successfully!'),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(backgroundColor: Colors.red, content: Text('Error: $e')),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setDialogState(() => _isUpdatingPassword = false);
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _isUpdatingPassword
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Update'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out of Wovzo Collab?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await Supabase.instance.client.auth.signOut();
+              if (mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const CircleAvatar(
-              radius: 40,
-              backgroundColor: Color(0xFFE1BEE7),
-              child: Icon(Icons.person, size: 40, color: Colors.purple),
-            ),
-            const SizedBox(height: 16),
-            const Text('My Profile', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(_email, style: TextStyle(fontSize: 16, color: Colors.grey)),
-            if (_role.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.purple.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.purple.shade200),
+    final isBrand = _role.toLowerCase() == 'brand';
+
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _loadProfile,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                // 1. TOP HEADER & AVATAR BANNER
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isBrand
+                          ? [const Color(0xFF1E293B), const Color(0xFF2563EB)]
+                          : [const Color(0xFF4C1D95), const Color(0xFF7C3AED)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(32),
+                      bottomRight: Radius.circular(32),
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+                  child: Column(
+                    children: [
+                      // Avatar with edit badge
+                      Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.15),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 44,
+                              backgroundColor: isBrand ? const Color(0xFFDBEAFE) : const Color(0xFFF3E8FF),
+                              child: Text(
+                                _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
+                                style: TextStyle(
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                  color: isBrand ? const Color(0xFF1E40AF) : const Color(0xFF6B21A8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: _showEditProfileBottomSheet,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                              ),
+                              child: const Icon(Icons.edit, size: 16, color: Colors.blue),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // User Name + verified badge
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _name,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.verified, color: Colors.lightBlueAccent, size: 20),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Email
+                      Text(
+                        _email,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.85),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      // Role Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isBrand ? Icons.business : Icons.auto_awesome,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isBrand ? 'BRAND / BUSINESS' : 'CREATOR / INFLUENCER',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_bio.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '"$_bio"',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                child: Text(
-                  _role.toUpperCase(),
-                  style: TextStyle(color: Colors.purple.shade700, fontWeight: FontWeight.bold, fontSize: 12),
+
+                const SizedBox(height: 16),
+
+                // 2. QUICK STATS ROW
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: isBrand ? Icons.campaign_rounded : Icons.send_rounded,
+                          label: isBrand ? 'Campaigns' : 'Applications',
+                          value: '$_stat1',
+                          color: Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.handshake_rounded,
+                          label: isBrand ? 'Applicants' : 'Collabs',
+                          value: '$_stat2',
+                          color: Colors.purple,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.verified_user_rounded,
+                          label: 'Account',
+                          value: 'Active',
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // 3. PROFILE DETAILS CARD
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Profile Details',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            TextButton.icon(
+                              onPressed: _showEditProfileBottomSheet,
+                              icon: const Icon(Icons.edit, size: 16),
+                              label: const Text('Edit'),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 1),
+                        const SizedBox(height: 8),
+                        _buildDetailTile(
+                          icon: Icons.category_outlined,
+                          title: 'Primary Niche',
+                          value: _niche,
+                        ),
+                        _buildDetailTile(
+                          icon: Icons.camera_alt_outlined,
+                          title: 'Instagram',
+                          value: _instagram.isNotEmpty ? _instagram : 'Not linked',
+                        ),
+                        _buildDetailTile(
+                          icon: isBrand ? Icons.language : Icons.play_circle_outline,
+                          title: isBrand ? 'Company Website' : 'YouTube / Channel',
+                          value: _youtube.isNotEmpty
+                              ? _youtube
+                              : (_website.isNotEmpty ? _website : 'Not linked'),
+                        ),
+                        _buildDetailTile(
+                          icon: Icons.location_on_outlined,
+                          title: 'Location',
+                          value: _location,
+                        ),
+                        if (_phone.isNotEmpty)
+                          _buildDetailTile(
+                            icon: Icons.phone_outlined,
+                            title: 'Phone',
+                            value: _phone,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // 4. ACCOUNT & SETTINGS CARD
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.lock_outline, color: Colors.blue),
+                          ),
+                          title: const Text('Change Password', style: TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: const Text('Update your login password', style: TextStyle(fontSize: 12)),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _showChangePasswordDialog,
+                        ),
+                        const Divider(height: 1, indent: 64),
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.help_outline, color: Colors.amber),
+                          ),
+                          title: const Text('Help & Support', style: TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: const Text('Contact support@wovzo.com', style: TextStyle(fontSize: 12)),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Help & Support'),
+                                content: const Text(
+                                  'For any questions, issues, or partnership inquiries, please contact:\n\nEmail: support@wovzo.com\nWebsite: https://wovzo.com',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(ctx).pop(),
+                                    child: const Text('Close'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                        const Divider(height: 1, indent: 64),
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.info_outline, color: Colors.grey),
+                          ),
+                          title: const Text('App Version', style: TextStyle(fontWeight: FontWeight.w600)),
+                          trailing: const Text('v1.0.0', style: TextStyle(color: Colors.grey)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // 5. LOGOUT BUTTON
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: _confirmLogout,
+                      icon: const Icon(Icons.logout, color: Colors.red),
+                      label: const Text(
+                        'Log Out',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.red, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        backgroundColor: Colors.red.shade50.withOpacity(0.3),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade900,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailTile({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: Colors.grey.shade700),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E293B),
                 ),
               ),
             ],
-            const SizedBox(height: 32),
-            
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Profile Name', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'New Password (leave blank to keep current)', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 24),
-            
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _updateProfile,
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Save Changes'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  await Supabase.instance.client.auth.signOut();
-                  if (context.mounted) {
-                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
-                  }
-                },
-                icon: const Icon(Icons.logout, color: Colors.red),
-                label: const Text('Logout', style: TextStyle(color: Colors.red)),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.red),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
