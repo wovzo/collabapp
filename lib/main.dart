@@ -683,38 +683,75 @@ class _ExploreScreenState extends State<ExploreScreen> {
             
             // Dynamic Campaign Cards from Supabase
             FutureBuilder<List<Map<String, dynamic>>>(
-              future: () {
-                var query = Supabase.instance.client
+              future: () async {
+                final data = await Supabase.instance.client
                     .from('campaigns')
                     .select('*, profiles(name)')
-                    .eq('status', 'active');
+                    .eq('status', 'active')
+                    .order('created_at', ascending: false);
                 
-                if (_selectedCategory != 'For You') {
-                  // Assuming category matching on niche or title for now since we don't have a category column yet
-                  query = query.ilike('niche', '%$_selectedCategory%');
-                }
+                final list = List<Map<String, dynamic>>.from(data);
                 
-                if (_searchQuery.isNotEmpty) {
-                  query = query.ilike('title', '%$_searchQuery%');
-                }
-                
-                return query.order('created_at', ascending: false);
+                return list.where((campaign) {
+                  // Filter by category
+                  if (_selectedCategory != 'For You') {
+                    final cat = _selectedCategory.toLowerCase();
+                    final title = (campaign['title'] ?? '').toString().toLowerCase();
+                    final desc = (campaign['description'] ?? '').toString().toLowerCase();
+                    final req = (campaign['requirements'] ?? '').toString().toLowerCase();
+                    
+                    if (!title.contains(cat) && !desc.contains(cat) && !req.contains(cat)) {
+                      return false;
+                    }
+                  }
+                  
+                  // Filter by search query
+                  if (_searchQuery.isNotEmpty) {
+                    final q = _searchQuery.toLowerCase();
+                    final title = (campaign['title'] ?? '').toString().toLowerCase();
+                    final desc = (campaign['description'] ?? '').toString().toLowerCase();
+                    final req = (campaign['requirements'] ?? '').toString().toLowerCase();
+                    final brand = (campaign['profiles']?['name'] ?? '').toString().toLowerCase();
+                    
+                    if (!title.contains(q) && !desc.contains(q) && !req.contains(q) && !brand.contains(q)) {
+                      return false;
+                    }
+                  }
+                  
+                  return true;
+                }).toList();
               }(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator(color: WovzoColors.orange),
+                    ),
+                  );
                 }
                 if (snapshot.hasError) {
-                  return Text('Error: ${snapshot.error}');
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                    ),
+                  );
                 }
                 
                 final campaigns = snapshot.data ?? [];
                 
                 if (campaigns.isEmpty) {
                   return const Padding(
-                    padding: EdgeInsets.all(20.0),
+                    padding: EdgeInsets.all(32.0),
                     child: Center(
-                      child: Text('No campaigns available yet.'),
+                      child: Column(
+                        children: [
+                          Icon(Icons.search_off, size: 48, color: Colors.grey),
+                          SizedBox(height: 8),
+                          Text('No campaigns match your filter.', style: TextStyle(color: Colors.grey)),
+                        ],
+                      ),
                     ),
                   );
                 }
@@ -728,6 +765,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: _buildCampaignCard(
                         context: context,
+                        campaignId: campaign['id']?.toString(),
                         brandName: brandName.toString(),
                         campaignTitle: campaign['title'].toString(),
                         budget: '₹${campaign['budget']}',
@@ -2635,13 +2673,13 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
     setState(() => _isLoading = true);
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
+      final requirementsString = 'Niche: ${_nicheController.text.trim()} • Platform: ${_platformController.text.trim().isEmpty ? 'Instagram' : _platformController.text.trim()}';
       await Supabase.instance.client.from('campaigns').insert({
         'brand_id': userId,
         'title': _titleController.text.trim(),
         'description': _descController.text.trim(),
-        'platform': _platformController.text.trim().isEmpty ? 'instagram' : _platformController.text.trim(),
-        'budget': int.tryParse(_budgetController.text) ?? 0,
-        'niche': _nicheController.text.trim(),
+        'budget': _budgetController.text.trim(),
+        'requirements': requirementsString,
         'status': 'active'
       });
       if (mounted) {
