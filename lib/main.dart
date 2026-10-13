@@ -13,9 +13,99 @@ Future<void> main() async {
   runApp(const WovzoCollabApp());
 }
 
+class WovzoColors {
+  static const Color orange = Color(0xFFFF6A00);
+  static const Color orangeDark = Color(0xFFE55A00);
+  static const Color orangeLight = Color(0xFFFFF2EB);
+  static const Color black = Color(0xFF111827);
+  static const Color deepBlack = Color(0xFF000000);
+  static const Color charcoal = Color(0xFF1F2937);
+  static const Color greyLight = Color(0xFFF8FAFC);
+}
+
+class WovzoLogo extends StatelessWidget {
+  final double fontSize;
+  final bool showBadge;
+  const WovzoLogo({super.key, this.fontSize = 32, this.showBadge = true});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (showBadge) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: WovzoColors.deepBlack,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: WovzoColors.orange, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: WovzoColors.orange.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'W',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: fontSize * 0.6,
+                  ),
+                ),
+                Text(
+                  'Z',
+                  style: TextStyle(
+                    color: WovzoColors.orange,
+                    fontWeight: FontWeight.w900,
+                    fontSize: fontSize * 0.6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'WOV',
+                style: TextStyle(
+                  color: WovzoColors.deepBlack,
+                  fontWeight: FontWeight.w900,
+                  fontSize: fontSize,
+                  letterSpacing: -1.0,
+                  fontFamily: 'Roboto',
+                ),
+              ),
+              TextSpan(
+                text: 'ZO',
+                style: TextStyle(
+                  color: WovzoColors.orange,
+                  fontWeight: FontWeight.w900,
+                  fontSize: fontSize,
+                  letterSpacing: -1.0,
+                  fontFamily: 'Roboto',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class WovzoCollabApp extends StatelessWidget {
   const WovzoCollabApp({super.key});
-
 
   @override
   Widget build(BuildContext context) {
@@ -23,9 +113,33 @@ class WovzoCollabApp extends StatelessWidget {
       title: 'Wovzo Collab',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: WovzoColors.orange,
+          primary: WovzoColors.orange,
+          secondary: WovzoColors.deepBlack,
+        ),
+        scaffoldBackgroundColor: Colors.white,
         useMaterial3: true,
         fontFamily: 'Roboto',
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: WovzoColors.orange,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          indicatorColor: WovzoColors.orangeLight,
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const IconThemeData(color: WovzoColors.orange);
+            }
+            return const IconThemeData(color: Color(0xFF64748B));
+          }),
+        ),
       ),
       home: const LoginScreen(),
     );
@@ -215,31 +329,14 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: Colors.blue[600],
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'W',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
+              const Center(
+                child: WovzoLogo(fontSize: 40, showBadge: true),
               ),
               const SizedBox(height: 32),
               Text(
                 _isLogin ? 'Welcome Back' : 'Create Account',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
               ),
               const SizedBox(height: 8),
               Text(
@@ -256,6 +353,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: BoxDecoration(
                     color: Colors.red[50],
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
                   ),
                   child: Text(
                     _errorMessage!,
@@ -264,9 +362,24 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
               SegmentedButton<String>(
+                  style: ButtonStyle(
+                    backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return WovzoColors.orangeLight;
+                      }
+                      return null;
+                    }),
+                    foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return WovzoColors.orange;
+                      }
+                      return WovzoColors.deepBlack;
+                    }),
+                    side: WidgetStateProperty.all(const BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
                   segments: const [
-                    ButtonSegment(value: 'influencer', label: Text('Influencer')),
-                    ButtonSegment(value: 'brand', label: Text('Brand')),
+                    ButtonSegment(value: 'influencer', label: Text('Influencer', style: TextStyle(fontWeight: FontWeight.w600))),
+                    ButtonSegment(value: 'brand', label: Text('Brand', style: TextStyle(fontWeight: FontWeight.w600))),
                   ],
                   selected: {_selectedRole},
                   onSelectionChanged: (Set<String> newSelection) {
@@ -318,6 +431,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: _isLoading ? null : _resetPassword,
+                    style: TextButton.styleFrom(foregroundColor: WovzoColors.orange),
                     child: const Text('Forgot Password?'),
                   ),
                 )
@@ -327,7 +441,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ElevatedButton(
                 onPressed: _isLoading ? null : _submitAuth,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[600],
+                  backgroundColor: WovzoColors.orange,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -359,6 +473,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         _errorMessage = null;
                       });
                     },
+                    style: TextButton.styleFrom(
+                      foregroundColor: WovzoColors.orange,
+                      textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     child: Text(_isLogin ? 'Sign Up' : 'Sign In'),
                   ),
                 ],
@@ -463,7 +581,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         onSelected: (bool selected) {
           if (selected) _updateCategory(label);
         },
-        selectedColor: Colors.blue[600],
+        selectedColor: WovzoColors.orange,
         labelStyle: TextStyle(
           color: isSelected ? Colors.white : Colors.grey[700],
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -495,12 +613,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Hey there! 👋',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey[900],
+                        color: WovzoColors.deepBlack,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -514,8 +632,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   ],
                 ),
                 CircleAvatar(
-                  backgroundColor: Colors.blue[100],
-                  child: const Text('I'),
+                  backgroundColor: WovzoColors.deepBlack,
+                  child: const Text('I', style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
                 )
               ],
             ),
@@ -526,7 +644,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               onChanged: _updateSearch,
               decoration: InputDecoration(
                 hintText: 'Search brands, categories...',
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search, color: WovzoColors.deepBlack),
                 filled: true,
                 fillColor: Colors.grey[100],
                 border: OutlineInputBorder(
@@ -553,12 +671,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
             const SizedBox(height: 24),
             
-            Text(
+            const Text(
               'Top Campaigns',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[900],
+                color: WovzoColors.deepBlack,
               ),
             ),
             const SizedBox(height: 16),
@@ -584,7 +702,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               }(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
                 }
                 if (snapshot.hasError) {
                   return Text('Error: ${snapshot.error}');
@@ -614,7 +732,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         campaignTitle: campaign['title'].toString(),
                         budget: '₹${campaign['budget']}',
                         requirements: campaign['requirements'].toString(),
-                        color: Colors.blue, // Can be randomized later
+                        color: WovzoColors.orange,
                       ),
                     );
                   }).toList(),
@@ -632,7 +750,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       margin: const EdgeInsets.only(right: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: isSelected ? Colors.blue : Colors.grey[100],
+        color: isSelected ? WovzoColors.orange : Colors.grey[100],
         borderRadius: BorderRadius.circular(20),
       ),
       child: Center(
@@ -793,14 +911,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[50],
-                foregroundColor: Colors.blue[700],
+                backgroundColor: WovzoColors.orangeLight,
+                foregroundColor: WovzoColors.orange,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('View Details'),
+              child: const Text('View Details', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -833,7 +951,7 @@ class CampaignDetailsScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Campaign Details', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Campaign Details', style: TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -845,14 +963,15 @@ class CampaignDetailsScreen extends StatelessWidget {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: WovzoColors.orangeLight,
                   borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: WovzoColors.orange.withOpacity(0.3)),
                 ),
                 child: Center(
                   child: Text(
                     brandName.isNotEmpty ? brandName[0].toUpperCase() : "B",
-                    style: TextStyle(
-                      color: color,
+                    style: const TextStyle(
+                      color: WovzoColors.orange,
                       fontWeight: FontWeight.bold,
                       fontSize: 32,
                     ),
@@ -879,6 +998,7 @@ class CampaignDetailsScreen extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
+                  color: WovzoColors.deepBlack,
                 ),
               ),
             ),
@@ -890,14 +1010,14 @@ class CampaignDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: _buildInfoCard('Platform', 'Instagram', Icons.camera_alt_outlined, Colors.purple),
+                  child: _buildInfoCard('Platform', 'Instagram', Icons.camera_alt_outlined, WovzoColors.orange),
                 ),
               ],
             ),
             const SizedBox(height: 32),
             const Text(
               'About the Campaign',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
             ),
             const SizedBox(height: 12),
             Text(
@@ -907,7 +1027,7 @@ class CampaignDetailsScreen extends StatelessWidget {
             const SizedBox(height: 32),
             const Text(
               'Requirements & Deliverables',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
             ),
             const SizedBox(height: 12),
             _buildRequirementItem('Minimum Followers', requirements.split('•')[0].trim()),
@@ -922,7 +1042,7 @@ class CampaignDetailsScreen extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () {},
               style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[600],
+              backgroundColor: WovzoColors.orange,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
@@ -1067,6 +1187,10 @@ class BrandCampaignsScreen extends StatelessWidget {
                       (context as Element).markNeedsBuild();
                     }
                   },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: WovzoColors.orange,
+                    foregroundColor: Colors.white,
+                  ),
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('New'),
                 ),
@@ -1082,7 +1206,7 @@ class BrandCampaignsScreen extends StatelessWidget {
                   .order('created_at', ascending: false),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
                 }
                 if (snapshot.hasError) {
                   return Center(child: Text('Error: ${snapshot.error}'));
@@ -1113,7 +1237,7 @@ class BrandCampaignsScreen extends StatelessWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Expanded(child: Text(campaign['title'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+                                Expanded(child: Text(campaign['title'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: WovzoColors.deepBlack))),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
@@ -1137,15 +1261,15 @@ class BrandCampaignsScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               decoration: BoxDecoration(
-                                color: Colors.purple[50],
+                                color: WovzoColors.orangeLight,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.people, size: 16, color: Colors.purple),
+                                  const Icon(Icons.people, size: 16, color: WovzoColors.orange),
                                   const SizedBox(width: 8),
-                                  Text('$appsCount Applicants', style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold)),
+                                  Text('$appsCount Applicants', style: const TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
                                 ],
                               ),
                             ),
@@ -1227,10 +1351,10 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
                       child: ListTile(
                         contentPadding: const EdgeInsets.all(16),
                         leading: CircleAvatar(
-                          backgroundColor: Colors.purple[100],
-                          child: Text(profile['name']?[0]?.toUpperCase() ?? 'I', style: const TextStyle(color: Colors.purple)),
+                          backgroundColor: WovzoColors.orangeLight,
+                          child: Text(profile['name']?[0]?.toUpperCase() ?? 'I', style: const TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
                         ),
-                        title: Text(profile['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(profile['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack)),
                         subtitle: Text('Applied for: ${campaign['title']}\nStatus: ${app['status'].toUpperCase()}'),
                         isThreeLine: true,
                         trailing: app['status'] == 'pending' 
@@ -1736,7 +1860,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: ElevatedButton(
                         onPressed: _isSaving ? null : _saveProfileChanges,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
+                          backgroundColor: WovzoColors.orange,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
@@ -1769,7 +1893,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: const Row(
                 children: [
-                  Icon(Icons.lock_reset, color: Colors.blue),
+                  Icon(Icons.lock_reset, color: WovzoColors.orange),
                   SizedBox(width: 8),
                   Text('Change Password'),
                 ],
@@ -1844,7 +1968,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade600,
+                    backgroundColor: WovzoColors.orange,
                     foregroundColor: Colors.white,
                   ),
                   child: _isUpdatingPassword
@@ -1898,7 +2022,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isBrand = _role.toLowerCase() == 'brand';
 
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
     }
 
     return Scaffold(
@@ -1913,15 +2037,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 // 1. TOP HEADER & AVATAR BANNER
                 Container(
                   width: double.infinity,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: isBrand
-                          ? [const Color(0xFF1E293B), const Color(0xFF2563EB)]
-                          : [const Color(0xFF4C1D95), const Color(0xFF7C3AED)],
+                      colors: [WovzoColors.deepBlack, WovzoColors.charcoal],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: const BorderRadius.only(
+                    borderRadius: BorderRadius.only(
                       bottomLeft: Radius.circular(32),
                       bottomRight: Radius.circular(32),
                     ),
@@ -1936,24 +2058,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Container(
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 3),
+                              border: Border.all(color: WovzoColors.orange, width: 3),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.15),
-                                  blurRadius: 10,
+                                  color: WovzoColors.orange.withOpacity(0.3),
+                                  blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
                               ],
                             ),
                             child: CircleAvatar(
                               radius: 44,
-                              backgroundColor: isBrand ? const Color(0xFFDBEAFE) : const Color(0xFFF3E8FF),
+                              backgroundColor: WovzoColors.deepBlack,
                               child: Text(
                                 _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 36,
                                   fontWeight: FontWeight.bold,
-                                  color: isBrand ? const Color(0xFF1E40AF) : const Color(0xFF6B21A8),
+                                  color: WovzoColors.orange,
                                 ),
                               ),
                             ),
@@ -1967,7 +2089,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 shape: BoxShape.circle,
                                 boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
                               ),
-                              child: const Icon(Icons.edit, size: 16, color: Colors.blue),
+                              child: const Icon(Icons.edit, size: 16, color: WovzoColors.orange),
                             ),
                           ),
                         ],
@@ -1986,7 +2108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Icon(Icons.verified, color: Colors.lightBlueAccent, size: 20),
+                          const Icon(Icons.verified, color: WovzoColors.orange, size: 20),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -2003,23 +2125,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: WovzoColors.orange.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                          border: Border.all(color: WovzoColors.orange.withOpacity(0.6)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               isBrand ? Icons.business : Icons.auto_awesome,
-                              color: Colors.white,
+                              color: WovzoColors.orange,
                               size: 14,
                             ),
                             const SizedBox(width: 6),
                             Text(
                               isBrand ? 'BRAND / BUSINESS' : 'CREATOR / INFLUENCER',
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: WovzoColors.orange,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 11,
                                 letterSpacing: 0.8,
@@ -2033,8 +2155,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.12),
+                            color: Colors.black.withOpacity(0.25),
                             borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withOpacity(0.1)),
                           ),
                           child: Text(
                             '"$_bio"',
@@ -2063,7 +2186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           icon: isBrand ? Icons.campaign_rounded : Icons.send_rounded,
                           label: isBrand ? 'Campaigns' : 'Applications',
                           value: '$_stat1',
-                          color: Colors.blue,
+                          color: WovzoColors.orange,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -2072,7 +2195,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           icon: Icons.handshake_rounded,
                           label: isBrand ? 'Applicants' : 'Collabs',
                           value: '$_stat2',
-                          color: Colors.purple,
+                          color: WovzoColors.deepBlack,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -2114,10 +2237,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             const Text(
                               'Profile Details',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
                             ),
                             TextButton.icon(
                               onPressed: _showEditProfileBottomSheet,
+                              style: TextButton.styleFrom(foregroundColor: WovzoColors.orange),
                               icon: const Icon(Icons.edit, size: 16),
                               label: const Text('Edit'),
                             ),
@@ -2181,10 +2305,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
+                              color: WovzoColors.orangeLight,
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.lock_outline, color: Colors.blue),
+                            child: const Icon(Icons.lock_outline, color: WovzoColors.orange),
                           ),
                           title: const Text('Change Password', style: TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: const Text('Update your login password', style: TextStyle(fontSize: 12)),
@@ -2572,10 +2696,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
                           final u = _users[index];
                           return ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: Colors.blue[100],
-                              child: Text(u['name']?[0]?.toUpperCase() ?? 'U', style: const TextStyle(color: Colors.blue)),
+                              backgroundColor: WovzoColors.orangeLight,
+                              child: Text(u['name']?[0]?.toUpperCase() ?? 'U', style: const TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
                             ),
-                            title: Text(u['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            title: Text(u['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack)),
                             onTap: () {
                               Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(peerId: u['id'], peerName: u['name'] ?? 'Unknown')));
                             },
@@ -2669,7 +2793,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.peerName)),
+      appBar: AppBar(title: Text(widget.peerName, style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack))),
       body: Column(
         children: [
           Expanded(
@@ -2685,12 +2809,12 @@ class _ChatScreenState extends State<ChatScreen> {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isMe ? Colors.blue : Colors.grey[200],
+                      color: isMe ? WovzoColors.orange : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       msg['content'],
-                      style: TextStyle(color: isMe ? Colors.white : Colors.black),
+                      style: TextStyle(color: isMe ? Colors.white : WovzoColors.deepBlack),
                     ),
                   ),
                 );
@@ -2715,7 +2839,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   const SizedBox(width: 8),
                   CircleAvatar(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: WovzoColors.orange,
                     child: IconButton(
                       icon: const Icon(Icons.send, color: Colors.white),
                       onPressed: _sendMessage,
