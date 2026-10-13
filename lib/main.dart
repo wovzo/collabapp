@@ -1566,12 +1566,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     setState(() => _isLoading = true);
-    final user = Supabase.instance.client.auth.currentUser;
+    
+    // 1. Fetch fresh user from server
+    User? user;
+    try {
+      final userResp = await Supabase.instance.client.auth.getUser();
+      user = userResp.user;
+    } catch (_) {
+      user = Supabase.instance.client.auth.currentUser;
+    }
+
     if (user != null) {
       _email = user.email ?? '';
 
       // Load user metadata
       final meta = user.userMetadata ?? {};
+      if (meta['name'] != null && meta['name'].toString().trim().isNotEmpty) {
+        _name = meta['name'].toString().trim();
+      }
       if (meta['bio'] != null && meta['bio'].toString().isNotEmpty) {
         _bio = meta['bio'].toString();
       }
@@ -1585,6 +1597,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       if (meta['phone'] != null) _phone = meta['phone'].toString();
       if (meta['website'] != null) _website = meta['website'].toString();
+      if (meta['role'] != null && meta['role'].toString().trim().isNotEmpty) {
+        _role = meta['role'].toString().trim();
+      }
 
       // Query database profile
       try {
@@ -1595,11 +1610,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .maybeSingle();
 
         if (data != null) {
-          if (data['name'] != null && data['name'].toString().trim().isNotEmpty) {
-            _name = data['name'].toString();
+          if (data['name'] != null &&
+              data['name'].toString().trim().isNotEmpty &&
+              data['name'].toString().trim() != 'User') {
+            _name = data['name'].toString().trim();
           }
           if (data['role'] != null && data['role'].toString().trim().isNotEmpty) {
-            _role = data['role'].toString();
+            _role = data['role'].toString().trim();
           }
         }
       } catch (e) {
@@ -1652,7 +1669,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _saveProfileChanges() async {
+  Future<void> _saveProfileChanges({
+    required StateSetter setModalState,
+    required BuildContext modalContext,
+  }) async {
+    setModalState(() => _isSaving = true);
     setState(() => _isSaving = true);
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -1666,14 +1687,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final newPhone = _phoneController.text.trim();
         final newWeb = _websiteController.text.trim();
 
-        // 1. Update profiles table
-        if (newName.isNotEmpty) {
-          await Supabase.instance.client.from('profiles').update({
-            'name': newName,
-          }).eq('id', user.id);
+        // 1. Try to update profiles table safely
+        try {
+          if (newName.isNotEmpty) {
+            await Supabase.instance.client.from('profiles').upsert({
+              'id': user.id,
+              'name': newName,
+              'role': _role,
+            });
+          }
+        } catch (e) {
+          debugPrint('Notice: profiles table direct update error: $e');
         }
 
-        // 2. Update user metadata
+        // 2. Update user metadata in Auth (reliably persists)
         await Supabase.instance.client.auth.updateUser(
           UserAttributes(
             data: {
@@ -1685,13 +1712,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               'location': newLoc,
               'phone': newPhone,
               'website': newWeb,
+              'role': _role,
             },
           ),
         );
 
         if (mounted) {
           setState(() {
-            _name = newName;
+            _name = newName.isNotEmpty ? newName : _name;
             _bio = newBio;
             _niche = newNiche;
             _instagram = newInsta;
@@ -1700,10 +1728,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _phone = newPhone;
             _website = newWeb;
           });
-          Navigator.of(context).pop(); // Dismiss bottom sheet
+
+          if (modalContext.mounted) {
+            Navigator.of(modalContext).pop();
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
               content: Row(
                 children: [
                   Icon(Icons.check_circle, color: Colors.white),
@@ -1716,13 +1749,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (e) {
+      debugPrint('Error updating profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.red, content: Text('Error updating profile: $e')),
+          SnackBar(
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            content: Text('Error updating profile: $e'),
+          ),
         );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
+      try {
+        setModalState(() => _isSaving = false);
+      } catch (_) {}
     }
   }
 
@@ -1858,14 +1899,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _isSaving ? null : _saveProfileChanges,
+                        onPressed: _isSaving
+                            ? null
+                            : () => _saveProfileChanges(
+                                  setModalState: setModalState,
+                                  modalContext: context,
+                                ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: WovzoColors.orange,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: _isSaving
-                            ? const CircularProgressIndicator(color: Colors.white)
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                              )
                             : const Text('Save Profile Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
