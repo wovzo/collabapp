@@ -1548,6 +1548,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _location = 'India';
   String _phone = '';
   String _website = '';
+  String _avatarUrl = '';
 
   // Stats
   int _stat1 = 0;
@@ -1565,6 +1566,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _locationController = TextEditingController();
   final _phoneController = TextEditingController();
   final _websiteController = TextEditingController();
+  final _avatarUrlController = TextEditingController();
 
   // Password controllers
   final _newPasswordController = TextEditingController();
@@ -1597,6 +1599,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _locationController.dispose();
     _phoneController.dispose();
     _websiteController.dispose();
+    _avatarUrlController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -1635,6 +1638,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       if (meta['phone'] != null) _phone = meta['phone'].toString();
       if (meta['website'] != null) _website = meta['website'].toString();
+      if (meta['avatar_url'] != null && meta['avatar_url'].toString().trim().isNotEmpty) {
+        _avatarUrl = meta['avatar_url'].toString().trim();
+      }
       if (meta['role'] != null && meta['role'].toString().trim().isNotEmpty) {
         _role = meta['role'].toString().trim();
       }
@@ -1670,6 +1676,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _locationController.text = _location;
       _phoneController.text = _phone;
       _websiteController.text = _website;
+      _avatarUrlController.text = _avatarUrl;
 
       // Query Stats
       await _loadStats(user.id);
@@ -1724,6 +1731,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final newLoc = _locationController.text.trim();
         final newPhone = _phoneController.text.trim();
         final newWeb = _websiteController.text.trim();
+        final newAvatar = _avatarUrlController.text.trim();
 
         // 1. Try to update profiles table safely
         try {
@@ -1750,6 +1758,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               'location': newLoc,
               'phone': newPhone,
               'website': newWeb,
+              'avatar_url': newAvatar,
               'role': _role,
             },
           ),
@@ -1765,6 +1774,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _location = newLoc;
             _phone = newPhone;
             _website = newWeb;
+            _avatarUrl = newAvatar;
           });
 
           if (modalContext.mounted) {
@@ -1805,6 +1815,272 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _saveAvatarOnly(String url, {required StateSetter setModalState, required BuildContext modalContext}) async {
+    setModalState(() => _isSaving = true);
+    setState(() => _isSaving = true);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await Supabase.instance.client.auth.updateUser(
+          UserAttributes(
+            data: {
+              'avatar_url': url,
+            },
+          ),
+        );
+        if (mounted) {
+          setState(() {
+            _avatarUrl = url;
+            _avatarUrlController.text = url;
+          });
+          if (modalContext.mounted) {
+            Navigator.of(modalContext).pop();
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Profile picture updated successfully!'),
+                ],
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error updating avatar: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            content: Text('Error updating photo: $e'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+      try {
+        setModalState(() => _isSaving = false);
+      } catch (_) {}
+    }
+  }
+
+  void _showChangeProfilePhotoBottomSheet() {
+    String tempAvatarUrl = _avatarUrl;
+    final tempController = TextEditingController(text: _avatarUrl);
+
+    final List<Map<String, String>> presets = [
+      {'name': 'Avatar 1', 'url': 'https://api.dicebear.com/7.x/adventurer/png?seed=Felix'},
+      {'name': 'Avatar 2', 'url': 'https://api.dicebear.com/7.x/adventurer/png?seed=Aneka'},
+      {'name': 'Avatar 3', 'url': 'https://api.dicebear.com/7.x/adventurer/png?seed=Milo'},
+      {'name': 'Avatar 4', 'url': 'https://api.dicebear.com/7.x/adventurer/png?seed=Zoe'},
+      {'name': 'Bot 1', 'url': 'https://api.dicebear.com/7.x/bottts/png?seed=Wovzo1'},
+      {'name': 'Bot 2', 'url': 'https://api.dicebear.com/7.x/bottts/png?seed=Wovzo2'},
+      {'name': 'Creator Boy', 'url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'},
+      {'name': 'Creator Girl', 'url': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'},
+      {'name': 'Fashion Stylist', 'url': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'},
+      {'name': 'Tech Reviewer', 'url': 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Profile Picture',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(modalCtx).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Live Avatar Preview
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: WovzoColors.orange, width: 3),
+                        boxShadow: [
+                          BoxShadow(
+                            color: WovzoColors.orange.withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: CircleAvatar(
+                        radius: 46,
+                        backgroundColor: WovzoColors.deepBlack,
+                        foregroundImage: tempAvatarUrl.isNotEmpty ? NetworkImage(tempAvatarUrl) : null,
+                        onForegroundImageError: tempAvatarUrl.isNotEmpty ? (e, s) {} : null,
+                        child: Text(
+                          _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
+                          style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: WovzoColors.orange),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Choose an Avatar Preset:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 72,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: presets.length,
+                        itemBuilder: (context, i) {
+                          final item = presets[i];
+                          final isSelected = tempAvatarUrl == item['url'];
+                          return GestureDetector(
+                            onTap: () {
+                              setModalState(() {
+                                tempAvatarUrl = item['url']!;
+                                tempController.text = item['url']!;
+                              });
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 12),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected ? WovzoColors.orange : Colors.grey.shade300,
+                                  width: isSelected ? 3 : 1,
+                                ),
+                              ),
+                              child: CircleAvatar(
+                                radius: 30,
+                                backgroundColor: Colors.grey.shade100,
+                                foregroundImage: NetworkImage(item['url']!),
+                                onForegroundImageError: (e, s) {},
+                                child: const Icon(Icons.person, color: Colors.grey),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Or Paste Image URL:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: tempController,
+                      decoration: InputDecoration(
+                        hintText: 'https://example.com/photo.jpg',
+                        prefixIcon: const Icon(Icons.link),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.check, color: WovzoColors.orange),
+                          onPressed: () {
+                            setModalState(() {
+                              tempAvatarUrl = tempController.text.trim();
+                            });
+                          },
+                        ),
+                      ),
+                      onChanged: (val) {
+                        setModalState(() {
+                          tempAvatarUrl = val.trim();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isSaving
+                            ? null
+                            : () => _saveAvatarOnly(
+                                  tempAvatarUrl,
+                                  setModalState: setModalState,
+                                  modalContext: modalCtx,
+                                ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: WovzoColors.orange,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: _isSaving
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text('Save Profile Picture', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    if (tempAvatarUrl.isNotEmpty || _avatarUrl.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _isSaving
+                            ? null
+                            : () => _saveAvatarOnly(
+                                  '',
+                                  setModalState: setModalState,
+                                  modalContext: modalCtx,
+                                ),
+                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        label: const Text('Remove Photo (Use Initial)', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showEditProfileBottomSheet() {
     _nameController.text = _name;
     _bioController.text = _bio;
@@ -1814,6 +2090,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _locationController.text = _location;
     _phoneController.text = _phone;
     _websiteController.text = _website;
+    _avatarUrlController.text = _avatarUrl;
 
     showModalBottomSheet(
       context: context,
@@ -1861,7 +2138,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    // Quick Avatar Preview & Change Photo button
+                    Center(
+                      child: Column(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              _showChangeProfilePhotoBottomSheet();
+                            },
+                            child: Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                CircleAvatar(
+                                  radius: 36,
+                                  backgroundColor: WovzoColors.deepBlack,
+                                  foregroundImage: _avatarUrl.isNotEmpty ? NetworkImage(_avatarUrl) : null,
+                                  onForegroundImageError: _avatarUrl.isNotEmpty ? (e, s) {} : null,
+                                  child: Text(
+                                    _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
+                                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: WovzoColors.orange),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: const BoxDecoration(
+                                    color: WovzoColors.orange,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              _showChangeProfilePhotoBottomSheet();
+                            },
+                            child: const Text(
+                              'Change Photo / Choose Preset',
+                              style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _avatarUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'Profile Picture URL (Optional)',
+                        hintText: 'https://...',
+                        prefixIcon: Icon(Icons.image_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     TextField(
                       controller: _nameController,
                       decoration: const InputDecoration(
@@ -2143,41 +2478,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Stack(
                         alignment: Alignment.bottomRight,
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: WovzoColors.orange, width: 3),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: WovzoColors.orange.withOpacity(0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: CircleAvatar(
-                              radius: 44,
-                              backgroundColor: WovzoColors.deepBlack,
-                              child: Text(
-                                _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
-                                style: const TextStyle(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
-                                  color: WovzoColors.orange,
+                          GestureDetector(
+                            onTap: _showChangeProfilePhotoBottomSheet,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: WovzoColors.orange, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: WovzoColors.orange.withOpacity(0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 44,
+                                backgroundColor: WovzoColors.deepBlack,
+                                foregroundImage: _avatarUrl.isNotEmpty ? NetworkImage(_avatarUrl) : null,
+                                onForegroundImageError: _avatarUrl.isNotEmpty ? (e, s) {} : null,
+                                child: Text(
+                                  _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
+                                  style: const TextStyle(
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.bold,
+                                    color: WovzoColors.orange,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                           GestureDetector(
-                            onTap: _showEditProfileBottomSheet,
+                            onTap: _showChangeProfilePhotoBottomSheet,
                             child: Container(
-                              padding: const EdgeInsets.all(6),
+                              padding: const EdgeInsets.all(7),
                               decoration: const BoxDecoration(
-                                color: Colors.white,
+                                color: WovzoColors.orange,
                                 shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                                boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
                               ),
-                              child: const Icon(Icons.edit, size: 16, color: WovzoColors.orange),
+                              child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
                             ),
                           ),
                         ],
