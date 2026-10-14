@@ -1,6 +1,23 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+ImageProvider? _getAvatarImageProvider(String url) {
+  if (url.isEmpty) return null;
+  if (url.startsWith('data:image/')) {
+    final commaIndex = url.indexOf(',');
+    final base64Str = commaIndex != -1 ? url.substring(commaIndex + 1) : url;
+    try {
+      return MemoryImage(base64Decode(base64Str));
+    } catch (e) {
+      debugPrint('Failed to decode base64 avatar: $e');
+      return null;
+    }
+  }
+  return NetworkImage(url);
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1947,7 +1964,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: CircleAvatar(
                         radius: 46,
                         backgroundColor: WovzoColors.deepBlack,
-                        foregroundImage: tempAvatarUrl.isNotEmpty ? NetworkImage(tempAvatarUrl) : null,
+                        foregroundImage: tempAvatarUrl.isNotEmpty ? _getAvatarImageProvider(tempAvatarUrl) : null,
                         onForegroundImageError: tempAvatarUrl.isNotEmpty ? (e, s) {} : null,
                         child: Text(
                           _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
@@ -1955,7 +1972,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
+                    // Direct Gallery / Photos and Camera Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              onPressed: _isSaving
+                                  ? null
+                                  : () async {
+                                      try {
+                                        final picker = ImagePicker();
+                                        final XFile? image = await picker.pickImage(
+                                          source: ImageSource.gallery,
+                                          maxWidth: 400,
+                                          maxHeight: 400,
+                                          imageQuality: 70,
+                                        );
+                                        if (image != null) {
+                                          final bytes = await image.readAsBytes();
+                                          final base64Str = base64Encode(bytes);
+                                          setModalState(() {
+                                            tempAvatarUrl = 'data:image/jpeg;base64,$base64Str';
+                                            tempController.text = '';
+                                          });
+                                        }
+                                      } catch (e) {
+                                        debugPrint('Gallery pick error: $e');
+                                        if (modalCtx.mounted) {
+                                          ScaffoldMessenger.of(modalCtx).showSnackBar(
+                                            SnackBar(
+                                              backgroundColor: Colors.red,
+                                              content: Text('Failed to pick from gallery: $e'),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                              icon: const Icon(Icons.photo_library, color: Colors.white, size: 20),
+                              label: const Text(
+                                'Gallery / Photos',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: WovzoColors.orange,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: 48,
+                          child: OutlinedButton.icon(
+                            onPressed: _isSaving
+                                ? null
+                                : () async {
+                                    try {
+                                      final picker = ImagePicker();
+                                      final XFile? image = await picker.pickImage(
+                                        source: ImageSource.camera,
+                                        maxWidth: 400,
+                                        maxHeight: 400,
+                                        imageQuality: 70,
+                                      );
+                                      if (image != null) {
+                                        final bytes = await image.readAsBytes();
+                                        final base64Str = base64Encode(bytes);
+                                        setModalState(() {
+                                          tempAvatarUrl = 'data:image/jpeg;base64,$base64Str';
+                                          tempController.text = '';
+                                        });
+                                      }
+                                    } catch (e) {
+                                      debugPrint('Camera error: $e');
+                                    }
+                                  },
+                            icon: const Icon(Icons.camera_alt_outlined, color: WovzoColors.orange, size: 18),
+                            label: const Text(
+                              'Camera',
+                              style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: WovzoColors.orange, width: 1.5),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              backgroundColor: WovzoColors.orangeLight,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: Colors.grey.shade300)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text(
+                            'OR CHOOSE AVATAR PRESET',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 0.5),
+                          ),
+                        ),
+                        Expanded(child: Divider(color: Colors.grey.shade300)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
                     const Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -2154,8 +2278,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 CircleAvatar(
                                   radius: 36,
                                   backgroundColor: WovzoColors.deepBlack,
-                                  foregroundImage: _avatarUrl.isNotEmpty ? NetworkImage(_avatarUrl) : null,
-                                  onForegroundImageError: _avatarUrl.isNotEmpty ? (e, s) {} : null,
+                                  foregroundImage: _avatarUrlController.text.isNotEmpty
+                                      ? _getAvatarImageProvider(_avatarUrlController.text)
+                                      : (_avatarUrl.isNotEmpty ? _getAvatarImageProvider(_avatarUrl) : null),
+                                  onForegroundImageError: (e, s) {},
                                   child: Text(
                                     _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
                                     style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: WovzoColors.orange),
@@ -2173,15 +2299,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              _showChangeProfilePhotoBottomSheet();
-                            },
-                            child: const Text(
-                              'Change Photo / Choose Preset',
-                              style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold),
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () async {
+                                  try {
+                                    final picker = ImagePicker();
+                                    final XFile? image = await picker.pickImage(
+                                      source: ImageSource.gallery,
+                                      maxWidth: 400,
+                                      maxHeight: 400,
+                                      imageQuality: 70,
+                                    );
+                                    if (image != null) {
+                                      final bytes = await image.readAsBytes();
+                                      final base64Str = base64Encode(bytes);
+                                      setModalState(() {
+                                        _avatarUrlController.text = 'data:image/jpeg;base64,$base64Str';
+                                      });
+                                    }
+                                  } catch (e) {
+                                    debugPrint('Gallery pick error: $e');
+                                  }
+                                },
+                                icon: const Icon(Icons.photo_library_outlined, size: 18, color: WovzoColors.orange),
+                                label: const Text('From Gallery', style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
+                              ),
+                              const Text(' • ', style: TextStyle(color: Colors.grey)),
+                              TextButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  _showChangeProfilePhotoBottomSheet();
+                                },
+                                icon: const Icon(Icons.auto_awesome, size: 16, color: WovzoColors.orange),
+                                label: const Text('Presets', style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -2495,7 +2649,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               child: CircleAvatar(
                                 radius: 44,
                                 backgroundColor: WovzoColors.deepBlack,
-                                foregroundImage: _avatarUrl.isNotEmpty ? NetworkImage(_avatarUrl) : null,
+                                foregroundImage: _avatarUrl.isNotEmpty ? _getAvatarImageProvider(_avatarUrl) : null,
                                 onForegroundImageError: _avatarUrl.isNotEmpty ? (e, s) {} : null,
                                 child: Text(
                                   _name.isNotEmpty ? _name[0].toUpperCase() : 'U',
