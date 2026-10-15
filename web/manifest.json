@@ -1,11 +1,11 @@
 {
-    "name": "wovzo_collab_mobile",
-    "short_name": "wovzo_collab_mobile",
+    "name": "Wovzo Collab",
+    "short_name": "Wovzo",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#111827",
+    "theme_color": "#FF6A00",
+    "description": "Wovzo Influencer & Brand Collaboration Platform",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

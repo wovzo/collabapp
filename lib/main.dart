@@ -41,62 +41,34 @@ class WovzoColors {
 }
 
 class WovzoLogo extends StatelessWidget {
+  final double? height;
   final double fontSize;
   final bool showBadge;
-  const WovzoLogo({super.key, this.fontSize = 32, this.showBadge = true});
+  final bool isDark;
+
+  const WovzoLogo({
+    super.key,
+    this.height,
+    this.fontSize = 32,
+    this.showBadge = false,
+    this.isDark = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (showBadge) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: WovzoColors.deepBlack,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: WovzoColors.orange, width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: WovzoColors.orange.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'W',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: fontSize * 0.6,
-                  ),
-                ),
-                Text(
-                  'Z',
-                  style: TextStyle(
-                    color: WovzoColors.orange,
-                    fontWeight: FontWeight.w900,
-                    fontSize: fontSize * 0.6,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        RichText(
+    final logoHeight = height ?? (fontSize * 1.2);
+    return Image.asset(
+      isDark ? 'assets/images/wovzo_logo_white.png' : 'assets/images/wovzo_logo.png',
+      height: logoHeight,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) {
+        return RichText(
           text: TextSpan(
             children: [
               TextSpan(
                 text: 'WOV',
                 style: TextStyle(
-                  color: WovzoColors.deepBlack,
+                  color: isDark ? Colors.white : WovzoColors.deepBlack,
                   fontWeight: FontWeight.w900,
                   fontSize: fontSize,
                   letterSpacing: -1.0,
@@ -115,8 +87,8 @@ class WovzoLogo extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -347,7 +319,7 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Center(
-                child: WovzoLogo(fontSize: 40, showBadge: true),
+                child: WovzoLogo(height: 50),
               ),
               const SizedBox(height: 32),
               Text(
@@ -624,6 +596,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: const Align(
+                alignment: Alignment.centerLeft,
+                child: WovzoLogo(height: 26),
+              ),
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
