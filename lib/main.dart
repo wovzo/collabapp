@@ -799,6 +799,104 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
+  void _showApplyBottomSheet(BuildContext context, String campaignId, String campaignTitle, String brandName) {
+    final pitchController = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          left: 20,
+          right: 20,
+          top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Apply for $campaignTitle',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            Text('Brand: $brandName', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            const SizedBox(height: 16),
+            const Text(
+              'Your Proposal / Pitch (Optional)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: pitchController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Tell the brand why you are a great fit (e.g. niche, reach, video idea)...',
+                hintStyle: const TextStyle(fontSize: 13),
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final userId = Supabase.instance.client.auth.currentUser?.id;
+                  if (userId == null) return;
+                  Navigator.pop(ctx);
+                  try {
+                    final pitchText = pitchController.text.trim();
+                    final payload = {
+                      'campaign_id': campaignId,
+                      'influencer_id': userId,
+                      'status': 'pending',
+                      if (pitchText.isNotEmpty) 'pitch': pitchText,
+                    };
+                    await Supabase.instance.client.from('applications').insert(payload);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Successfully applied to campaign!')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You have already applied or an error occurred.')),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: WovzoColors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Submit Application', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCampaignCard({
     required BuildContext context,
     required String brandName,
@@ -902,58 +1000,54 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-                        child: ElevatedButton(
-              onPressed: () async {
-                if (campaignId == null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => CampaignDetailsScreen(
-                        brandName: brandName,
-                        campaignTitle: campaignTitle,
-                        budget: budget,
-                        requirements: requirements,
-                        color: color,
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CampaignDetailsScreen(
+                          brandName: brandName,
+                          campaignTitle: campaignTitle,
+                          budget: budget,
+                          requirements: requirements,
+                          color: color,
+                          campaignId: campaignId,
+                        ),
                       ),
-                    ),
-                  );
-                  return;
-                }
-                
-                try {
-                  final userId = Supabase.instance.client.auth.currentUser?.id;
-                  if (userId == null) return;
-                  
-                  await Supabase.instance.client.from("applications").insert({
-                    "campaign_id": campaignId,
-                    "influencer_id": userId,
-                  });
-                  
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Successfully applied to campaign!")),
                     );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("You have already applied or an error occurred.")),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: WovzoColors.orangeLight,
-                foregroundColor: WovzoColors.orange,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: WovzoColors.deepBlack,
+                    side: BorderSide(color: Colors.grey[300]!),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Details', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
-              child: const Text('View Details', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (campaignId != null) {
+                      _showApplyBottomSheet(context, campaignId, campaignTitle, brandName);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: WovzoColors.orange,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Apply with Pitch', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -967,6 +1061,7 @@ class CampaignDetailsScreen extends StatelessWidget {
   final String budget;
   final String requirements;
   final Color color;
+  final String? campaignId;
 
   const CampaignDetailsScreen({
     super.key,
@@ -975,7 +1070,108 @@ class CampaignDetailsScreen extends StatelessWidget {
     required this.budget,
     required this.requirements,
     required this.color,
+    this.campaignId,
   });
+
+  void _showApplyDialog(BuildContext context) {
+    if (campaignId == null) return;
+    final pitchController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          left: 20,
+          right: 20,
+          top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Apply for $campaignTitle',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            Text('Brand: $brandName • Payout: $budget', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            const SizedBox(height: 16),
+            const Text(
+              'Your Proposal / Pitch (Optional)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: pitchController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Tell the brand why you are a great fit (e.g. niche, reach, video idea)...',
+                hintStyle: const TextStyle(fontSize: 13),
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final userId = Supabase.instance.client.auth.currentUser?.id;
+                  if (userId == null) return;
+                  Navigator.pop(ctx);
+                  try {
+                    final pitchText = pitchController.text.trim();
+                    final payload = {
+                      'campaign_id': campaignId,
+                      'influencer_id': userId,
+                      'status': 'pending',
+                      if (pitchText.isNotEmpty) 'pitch': pitchText,
+                    };
+                    await Supabase.instance.client.from('applications').insert(payload);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Successfully applied to campaign!')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You have already applied or an error occurred.')),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: WovzoColors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Submit Application', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
 
   @override
@@ -1074,7 +1270,7 @@ class CampaignDetailsScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(16.0),
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: () => _showApplyDialog(context),
               style: ElevatedButton.styleFrom(
               backgroundColor: WovzoColors.orange,
               foregroundColor: Colors.white,
@@ -1330,16 +1526,83 @@ class BrandApplicantsScreen extends StatefulWidget {
 }
 
 class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
-  Future<void> _updateStatus(BuildContext context, String applicationId, String newStatus) async {
+  String _selectedTab = 'all'; // 'all', 'deliverables', 'pending', 'completed'
+
+  Future<void> _updateStatus(BuildContext context, String applicationId, String newStatus, {String? revisionNotes}) async {
     try {
+      final payload = <String, dynamic>{
+        'status': newStatus,
+        if (newStatus == 'completed') 'completed_at': DateTime.now().toIso8601String(),
+        if (revisionNotes != null) 'revision_notes': revisionNotes,
+      };
       await Supabase.instance.client
           .from('applications')
-          .update({'status': newStatus})
+          .update(payload)
           .eq('id', applicationId);
-      setState(() {}); // refresh UI
+      if (mounted) setState(() {});
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(newStatus == 'completed' ? 'Deliverable approved & completed! 🎉' : 'Status updated to $newStatus')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
+  }
+
+  void _showRevisionDialog(BuildContext context, String applicationId, String influencerName) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Request Changes from $influencerName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'What changes are required before you can approve this deliverable?',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'e.g. Please tag @brand handle and add coupon code in description...',
+                hintStyle: const TextStyle(fontSize: 12),
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              Navigator.pop(ctx);
+              _updateStatus(context, applicationId, 'revision_requested', revisionNotes: text);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: WovzoColors.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Send Feedback'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1349,10 +1612,24 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
-            padding: EdgeInsets.all(16.0),
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
               'Influencer Applications',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildTabChip('all', 'All'),
+                  _buildTabChip('deliverables', 'Review Proofs'),
+                  _buildTabChip('pending', 'Pending'),
+                  _buildTabChip('completed', 'Completed'),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -1360,55 +1637,227 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
               future: _fetchApplicants(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
                 }
                 if (snapshot.hasError) {
                   return Center(child: Text('Error: ${snapshot.error}'));
                 }
                 
-                final apps = snapshot.data ?? [];
+                final allApps = snapshot.data ?? [];
+                final apps = allApps.where((app) {
+                  final s = app['status']?.toString();
+                  if (_selectedTab == 'deliverables') return s == 'submitted';
+                  if (_selectedTab == 'pending') return s == 'pending';
+                  if (_selectedTab == 'completed') return s == 'completed';
+                  return true;
+                }).toList();
+
                 if (apps.isEmpty) {
-                  return const Center(child: Text('No applications yet.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
+                        const SizedBox(height: 12),
+                        Text(
+                          _selectedTab == 'deliverables' 
+                              ? 'No submitted deliverables awaiting review.'
+                              : _selectedTab == 'pending'
+                              ? 'No pending applications.'
+                              : 'No applications found.',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  );
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   itemCount: apps.length,
                   itemBuilder: (context, index) {
                     final app = apps[index];
-                    final profile = app['profiles'];
-                    final campaign = app['campaigns'];
-                    
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(16),
-                        leading: CircleAvatar(
-                          backgroundColor: WovzoColors.orangeLight,
-                          child: Text(profile['name']?[0]?.toUpperCase() ?? 'I', style: const TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
+                    final profile = app['profiles'] as Map<String, dynamic>? ?? {};
+                    final campaign = app['campaigns'] as Map<String, dynamic>? ?? {};
+                    final status = app['status']?.toString() ?? 'pending';
+                    final influencerName = profile['name']?.toString() ?? 'Creator';
+                    final isSubmitted = status == 'submitted';
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSubmitted ? WovzoColors.orange : Colors.grey[200]!,
+                          width: isSubmitted ? 1.5 : 1,
                         ),
-                        title: Text(profile['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack)),
-                        subtitle: Text('Applied for: ${campaign['title']}\nStatus: ${app['status'].toUpperCase()}'),
-                        isThreeLine: true,
-                        trailing: app['status'] == 'pending' 
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.check_circle, color: Colors.green),
-                                  onPressed: () => _updateStatus(context, app['id'], 'accepted'),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: WovzoColors.orangeLight,
+                                child: Text(
+                                  influencerName.isNotEmpty ? influencerName[0].toUpperCase() : 'C',
+                                  style: const TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.cancel, color: Colors.red),
-                                  onPressed: () => _updateStatus(context, app['id'], 'rejected'),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      influencerName,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WovzoColors.deepBlack),
+                                    ),
+                                    Text(
+                                      'For: ${campaign['title'] ?? 'Campaign'}',
+                                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _buildStatusBadge(status),
+                            ],
+                          ),
+                          if (app['pitch'] != null && app['pitch'].toString().trim().isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.grey[200]!),
+                              ),
+                              child: Text(
+                                '💬 Pitch: "${app['pitch']}"',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[800], fontStyle: FontStyle.italic),
+                              ),
+                            ),
+                          ],
+                          if (app['submission_url'] != null && app['submission_url'].toString().trim().isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: WovzoColors.orangeLight,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: WovzoColors.orange.withOpacity(0.3)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.link, size: 16, color: WovzoColors.orange),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          app['submission_url'].toString(),
+                                          style: const TextStyle(fontSize: 13, color: WovzoColors.orange, fontWeight: FontWeight.bold),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (app['submission_notes'] != null && app['submission_notes'].toString().isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Notes: ${app['submission_notes']}',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[800]),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (status == 'revision_requested' && app['revision_notes'] != null) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.red[50],
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.red[200]!),
+                              ),
+                              child: Text(
+                                'Revision requested: ${app['revision_notes']}',
+                                style: TextStyle(fontSize: 12, color: Colors.red[800]),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 14),
+                          if (status == 'pending') ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _updateStatus(context, app['id'], 'rejected'),
+                                    icon: const Icon(Icons.close, size: 16, color: Colors.red),
+                                    label: const Text('Reject', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(color: Colors.red),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _updateStatus(context, app['id'], 'accepted'),
+                                    icon: const Icon(Icons.check, size: 16, color: Colors.white),
+                                    label: const Text('Accept', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green[600],
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
                                 ),
                               ],
-                            )
-                          : Icon(
-                              app['status'] == 'accepted' ? Icons.check_circle : Icons.cancel,
-                              color: app['status'] == 'accepted' ? Colors.green : Colors.grey,
                             ),
+                          ] else if (status == 'submitted') ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _showRevisionDialog(context, app['id'], influencerName),
+                                    icon: const Icon(Icons.edit_note, size: 16, color: Colors.orange),
+                                    label: const Text('Revision', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(color: Colors.orange),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _updateStatus(context, app['id'], 'completed'),
+                                    icon: const Icon(Icons.verified, size: 16, color: Colors.white),
+                                    label: const Text('Approve Work', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green[600],
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
                     );
                   },
@@ -1421,25 +1870,207 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
     );
   }
 
+  Widget _buildTabChip(String tabKey, String label) {
+    final isSelected = _selectedTab == tabKey;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (val) {
+          if (val) setState(() => _selectedTab = tabKey);
+        },
+        selectedColor: WovzoColors.orange,
+        labelStyle: TextStyle(
+          color: isSelected ? Colors.white : Colors.grey[700],
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          fontSize: 12,
+        ),
+        backgroundColor: Colors.grey[100],
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bg = Colors.amber[50]!;
+    Color text = Colors.amber[800]!;
+    String label = 'PENDING';
+
+    if (status == 'accepted') {
+      bg = Colors.blue[50]!;
+      text = Colors.blue[700]!;
+      label = 'ACCEPTED';
+    } else if (status == 'submitted') {
+      bg = WovzoColors.orangeLight;
+      text = WovzoColors.orange;
+      label = 'NEEDS REVIEW';
+    } else if (status == 'revision_requested') {
+      bg = Colors.red[50]!;
+      text = Colors.red[700]!;
+      label = 'REVISION';
+    } else if (status == 'completed') {
+      bg = Colors.green[50]!;
+      text = Colors.green[700]!;
+      label = 'COMPLETED 🎉';
+    } else if (status == 'rejected') {
+      bg = Colors.grey[100]!;
+      text = Colors.grey[600]!;
+      label = 'REJECTED';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Text(label, style: TextStyle(color: text, fontWeight: FontWeight.bold, fontSize: 11)),
+    );
+  }
+
   Future<List<Map<String, dynamic>>> _fetchApplicants() async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return [];
     
-    // Fetch all applications
     final appsResponse = await Supabase.instance.client
         .from('applications')
-        .select('*, profiles:influencer_id(name), campaigns:campaign_id(title, brand_id)')
+        .select('*, profiles:influencer_id(name), campaigns:campaign_id(title, brand_id, budget)')
         .order('created_at', ascending: false);
         
-    // Filter locally to avoid complex joins in Flutter for now
-    return appsResponse.where((app) => app['campaigns']['brand_id'] == userId).toList();
+    final list = List<Map<String, dynamic>>.from(appsResponse);
+    return list.where((app) => app['campaigns'] != null && app['campaigns']['brand_id'] == userId).toList();
   }
 }
 
-
-class ApplicationsScreen extends StatelessWidget {
+class ApplicationsScreen extends StatefulWidget {
   const ApplicationsScreen({super.key});
 
+  @override
+  State<ApplicationsScreen> createState() => _ApplicationsScreenState();
+}
+
+class _ApplicationsScreenState extends State<ApplicationsScreen> {
+  void _openSubmitProofSheet(Map<String, dynamic> app) {
+    final urlController = TextEditingController(text: app['submission_url']?.toString() ?? '');
+    final notesController = TextEditingController(text: app['submission_notes']?.toString() ?? '');
+    final campaign = app['campaigns'] as Map<String, dynamic>? ?? {};
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          left: 20,
+          right: 20,
+          top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Submit Deliverable Proof',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            Text(
+              'Campaign: ${campaign['title'] ?? 'Campaign'}',
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Live Post URL *',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: urlController,
+              decoration: InputDecoration(
+                hintText: 'https://instagram.com/reel/... or YouTube URL',
+                hintStyle: const TextStyle(fontSize: 13),
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Notes for Brand (Optional)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: notesController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'e.g. Posted at peak time, mentioned promo code...',
+                hintStyle: const TextStyle(fontSize: 13),
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final url = urlController.text.trim();
+                  if (url.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter the live post URL')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(ctx);
+                  try {
+                    await Supabase.instance.client.from('applications').update({
+                      'status': 'submitted',
+                      'submission_url': url,
+                      'submission_notes': notesController.text.trim(),
+                      'submitted_at': DateTime.now().toIso8601String(),
+                    }).eq('id', app['id']);
+                    
+                    if (mounted) setState(() {});
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Deliverable submitted! Waiting for brand review.')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: WovzoColors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Submit for Brand Approval', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1448,12 +2079,13 @@ class ApplicationsScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
-            padding: EdgeInsets.all(16.0),
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
               'My Applications',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
+                color: WovzoColors.deepBlack,
               ),
             ),
           ),
@@ -1466,7 +2098,7 @@ class ApplicationsScreen extends StatelessWidget {
                   .order('created_at', ascending: false),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
                 }
                 if (snapshot.hasError) {
                   return Center(child: Text('Error: ${snapshot.error}'));
@@ -1475,43 +2107,119 @@ class ApplicationsScreen extends StatelessWidget {
                 final apps = snapshot.data ?? [];
                 
                 if (apps.isEmpty) {
-                  return const Center(child: Text('You haven\'t applied to any campaigns yet.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
+                        const SizedBox(height: 12),
+                        Text('You haven\'t applied to any campaigns yet.', style: TextStyle(color: Colors.grey[600])),
+                      ],
+                    ),
+                  );
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   itemCount: apps.length,
                   itemBuilder: (context, index) {
                     final app = apps[index];
-                    final campaign = app['campaigns'];
-                    final brandName = campaign['profiles']['name'] ?? 'Brand';
-                    
-                    Color statusColor = Colors.orange;
-                    if (app['status'] == 'accepted') statusColor = Colors.green;
-                    if (app['status'] == 'rejected') statusColor = Colors.red;
+                    final campaign = app['campaigns'] as Map<String, dynamic>? ?? {};
+                    final brandName = campaign['profiles']?['name']?.toString() ?? 'Brand';
+                    final status = app['status']?.toString() ?? 'pending';
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(16),
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue[100],
-                          child: Text(brandName[0].toUpperCase()),
-                        ),
-                        title: Text(campaign['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Budget: ₹${campaign['budget']}'),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[200]!),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
-                          child: Text(
-                            app['status'].toString().toUpperCase(),
-                            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: WovzoColors.orangeLight,
+                                child: Text(
+                                  brandName.isNotEmpty ? brandName[0].toUpperCase() : 'B',
+                                  style: const TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      campaign['title']?.toString() ?? 'Campaign',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WovzoColors.deepBlack),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Brand: $brandName • Payout: ₹${campaign['budget'] ?? '0'}',
+                                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _buildStatusBadge(status),
+                            ],
                           ),
-                        ),
+                          if (status == 'revision_requested' && app['revision_notes'] != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.red[50],
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.red[200]!),
+                              ),
+                              child: Text(
+                                '⚠️ Brand Feedback: ${app['revision_notes']}',
+                                style: TextStyle(fontSize: 12, color: Colors.red[800], fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                          if (app['submission_url'] != null && app['submission_url'].toString().isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              'Submitted URL: ${app['submission_url']}',
+                              style: const TextStyle(fontSize: 12, color: WovzoColors.orange, fontWeight: FontWeight.w500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          if (status == 'accepted' || status == 'revision_requested') ...[
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _openSubmitProofSheet(app),
+                                icon: const Icon(Icons.upload_file, size: 16, color: Colors.white),
+                                label: Text(
+                                  status == 'revision_requested' ? 'Resubmit Deliverable Proof' : 'Submit Deliverable Proof',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: WovzoColors.orange,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     );
                   },
@@ -1521,6 +2229,40 @@ class ApplicationsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bg = Colors.amber[50]!;
+    Color text = Colors.amber[800]!;
+    String label = 'PENDING';
+
+    if (status == 'accepted') {
+      bg = Colors.blue[50]!;
+      text = Colors.blue[700]!;
+      label = 'ACCEPTED';
+    } else if (status == 'submitted') {
+      bg = WovzoColors.orangeLight;
+      text = WovzoColors.orange;
+      label = 'IN REVIEW';
+    } else if (status == 'revision_requested') {
+      bg = Colors.red[50]!;
+      text = Colors.red[700]!;
+      label = 'REVISION';
+    } else if (status == 'completed') {
+      bg = Colors.green[50]!;
+      text = Colors.green[700]!;
+      label = 'COMPLETED 🎉';
+    } else if (status == 'rejected') {
+      bg = Colors.grey[100]!;
+      text = Colors.grey[600]!;
+      label = 'REJECTED';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Text(label, style: TextStyle(color: text, fontWeight: FontWeight.bold, fontSize: 11)),
     );
   }
 }
