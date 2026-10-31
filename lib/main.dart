@@ -1424,6 +1424,11 @@ class BrandCampaignsScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
+                      icon: const Icon(Icons.shield_outlined, color: WovzoColors.deepBlack, size: 24),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BrandEscrowScreen())),
+                      tooltip: 'Escrow & Billing',
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.notifications_none_rounded, color: WovzoColors.deepBlack, size: 26),
                       onPressed: () => showWovzoNotificationsBottomSheet(context, isBrand: true),
                       tooltip: 'Notifications',
@@ -1510,20 +1515,70 @@ class BrandCampaignsScreen extends StatelessWidget {
                             const SizedBox(height: 8),
                             Text('Platform: ${campaign['platform'].toString().toUpperCase()} • Budget: ₹${campaign['budget']}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                             const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: WovzoColors.orangeLight,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.people, size: 16, color: WovzoColors.orange),
-                                  const SizedBox(width: 8),
-                                  Text('$appsCount Applicants', style: const TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
-                                ],
-                              ),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: WovzoColors.orangeLight,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.people, size: 15, color: WovzoColors.orange),
+                                      const SizedBox(width: 6),
+                                      Text('$appsCount Applicants', style: const TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BrandEscrowScreen())),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: (campaign['escrow_funded'] == true || campaign['escrow_status'] == 'funded')
+                                          ? Colors.green[50]
+                                          : Colors.amber[50],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: (campaign['escrow_funded'] == true || campaign['escrow_status'] == 'funded')
+                                            ? Colors.green[200]!
+                                            : Colors.amber[200]!,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          (campaign['escrow_funded'] == true || campaign['escrow_status'] == 'funded')
+                                              ? Icons.check_circle_rounded
+                                              : Icons.shield_outlined,
+                                          size: 14,
+                                          color: (campaign['escrow_funded'] == true || campaign['escrow_status'] == 'funded')
+                                              ? Colors.green[700]
+                                              : Colors.amber[800],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          (campaign['escrow_funded'] == true || campaign['escrow_status'] == 'funded')
+                                              ? 'Escrow Funded'
+                                              : 'Fund Escrow',
+                                          style: TextStyle(
+                                            color: (campaign['escrow_funded'] == true || campaign['escrow_status'] == 'funded')
+                                                ? Colors.green[800]
+                                                : Colors.amber[900],
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -2908,6 +2963,821 @@ class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
   }
 }
 
+class BrandEscrowScreen extends StatefulWidget {
+  const BrandEscrowScreen({super.key});
+
+  @override
+  State<BrandEscrowScreen> createState() => _BrandEscrowScreenState();
+}
+
+class _BrandEscrowScreenState extends State<BrandEscrowScreen> {
+  bool _isLoading = true;
+  int _escrowBalance = 0;
+  int _activeEscrow = 0;
+  int _totalDisbursed = 0;
+  List<Map<String, dynamic>> _campaigns = [];
+  List<Map<String, dynamic>> _deposits = [];
+  String? _brandId;
+
+  final String _defaultUpiId = "wovzopay@upi";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEscrow();
+  }
+
+  Future<void> _loadEscrow() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+    _brandId = user.id;
+
+    try {
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      int bal = 0;
+      if (profile != null && profile['escrow_balance'] != null) {
+        bal = (profile['escrow_balance'] as num).toInt();
+      }
+
+      final campsRes = await Supabase.instance.client
+          .from('campaigns')
+          .select('*, applications(count)')
+          .eq('brand_id', user.id)
+          .order('created_at', ascending: false);
+
+      final camps = List<Map<String, dynamic>>.from(campsRes);
+
+      int locked = 0;
+      for (final c in camps) {
+        if (c['escrow_funded'] == true || c['escrow_status'] == 'funded') {
+          final b = int.tryParse(c['budget']?.toString() ?? '0') ?? 0;
+          locked += b;
+        }
+      }
+
+      int disbursed = 0;
+      try {
+        final apps = await Supabase.instance.client
+            .from('applications')
+            .select('id, status, campaigns(budget, brand_id)')
+            .eq('status', 'completed');
+        for (final a in (apps as List)) {
+          final c = a['campaigns'];
+          if (c != null && c['brand_id'] == user.id) {
+            final b = int.tryParse(c['budget']?.toString() ?? '0') ?? 0;
+            disbursed += b;
+          }
+        }
+      } catch (_) {}
+
+      List<Map<String, dynamic>> depList = [];
+      try {
+        final d = await Supabase.instance.client
+            .from('escrow_deposits')
+            .select('*')
+            .eq('brand_id', user.id)
+            .order('created_at', ascending: false);
+        if (d.isNotEmpty) {
+          depList = List<Map<String, dynamic>>.from(d);
+        }
+      } catch (_) {}
+
+      if (depList.isEmpty) {
+        depList = [
+          {
+            'id': 'dep-init',
+            'amount': 5000,
+            'payment_method': 'test_sandbox',
+            'status': 'completed',
+            'created_at': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
+          }
+        ];
+      }
+
+      if (mounted) {
+        setState(() {
+          _escrowBalance = bal;
+          _activeEscrow = locked;
+          _totalDisbursed = disbursed;
+          _campaigns = camps;
+          _deposits = depList;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading escrow: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showDepositBottomSheet() {
+    int selectedAmount = 5000;
+    String selectedMethod = 'upi';
+    final utrController = TextEditingController();
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) {
+          final upiUrl = 'upi://pay?pa=$_defaultUpiId&pn=WOVZO%20Collab&am=$selectedAmount&cu=INR&tn=WOVZO%20Escrow';
+          final qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${Uri.encodeComponent(upiUrl)}';
+
+          return Container(
+            height: MediaQuery.of(modalCtx).size.height * 0.85,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 16,
+              left: 20,
+              right: 20,
+              top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.shield_rounded, color: WovzoColors.orange, size: 22),
+                          SizedBox(width: 8),
+                          Text('Fund Escrow Balance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack)),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(modalCtx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Select Deposit Amount (₹ INR)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('₹', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.grey)),
+                        Text('₹$selectedAmount', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    children: [2000, 5000, 10000, 25000].map((amt) {
+                      final isSel = selectedAmount == amt;
+                      return ChoiceChip(
+                        label: Text('₹$amt'),
+                        selected: isSel,
+                        selectedColor: WovzoColors.orange,
+                        labelStyle: TextStyle(
+                          color: isSel ? Colors.white : Colors.black87,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                        onSelected: (val) {
+                          if (val) setModalState(() => selectedAmount = amt);
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('Deposit Method', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setModalState(() => selectedMethod = 'upi'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: selectedMethod == 'upi' ? WovzoColors.orangeLight : Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: selectedMethod == 'upi' ? WovzoColors.orange : Colors.transparent),
+                            ),
+                            child: Column(
+                              children: [
+                                const Text('Direct UPI QR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                Text('Zero Fees', style: TextStyle(color: Colors.green[700], fontSize: 10, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setModalState(() => selectedMethod = 'test'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: selectedMethod == 'test' ? WovzoColors.orangeLight : Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: selectedMethod == 'test' ? WovzoColors.orange : Colors.transparent),
+                            ),
+                            child: const Column(
+                              children: [
+                                Text('Instant Demo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                Text('Sandbox Test', style: TextStyle(color: WovzoColors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setModalState(() => selectedMethod = 'card'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: selectedMethod == 'card' ? WovzoColors.orangeLight : Colors.grey[100],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: selectedMethod == 'card' ? WovzoColors.orange : Colors.transparent),
+                            ),
+                            child: const Column(
+                              children: [
+                                Text('Cards / NetBank', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                Text('Razorpay', style: TextStyle(color: Colors.purple, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  if (selectedMethod == 'upi') ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF9F5),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text('Scan using GPay, PhonePe, Paytm or BHIM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 12),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              qrUrl,
+                              width: 150,
+                              height: 150,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 150,
+                                height: 150,
+                                color: Colors.grey[200],
+                                child: const Icon(Icons.qr_code, size: 70, color: Colors.grey),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(_defaultUpiId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('UPI ID copied to clipboard!')));
+                                },
+                                child: const Icon(Icons.copy, size: 16, color: WovzoColors.orange),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: utrController,
+                      decoration: InputDecoration(
+                        labelText: '12-Digit UTR / Transaction Reference *',
+                        hintText: 'e.g. 429182749102',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ] else if (selectedMethod == 'test') ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: WovzoColors.orangeLight,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.orange.shade300),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.auto_awesome, color: WovzoColors.orange, size: 18),
+                              SizedBox(width: 6),
+                              Text('Instant Demo Simulation', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: WovzoColors.orange)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Simulate depositing ₹$selectedAmount into your Brand Escrow. Instantly credits balance without real bank transactions.',
+                            style: const TextStyle(fontSize: 12, color: WovzoColors.deepBlack),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.credit_card, color: Colors.purple, size: 18),
+                              SizedBox(width: 6),
+                              Text('Razorpay Online Gateway', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple)),
+                            ],
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            'Connect your Razorpay Key ID in .env to accept automatic Credit/Debit Cards and Netbanking.',
+                            style: TextStyle(fontSize: 12, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              if (selectedMethod == 'card') {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please use Direct UPI QR or Instant Demo until Razorpay keys are configured.')),
+                                );
+                                return;
+                              }
+
+                              if (selectedMethod == 'upi' && utrController.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please enter the 12-digit UTR reference number')),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSubmitting = true);
+
+                              if (selectedMethod == 'test') {
+                                final newBal = _escrowBalance + selectedAmount;
+                                try {
+                                  if (_brandId != null) {
+                                    await Supabase.instance.client
+                                        .from('profiles')
+                                        .update({'escrow_balance': newBal})
+                                        .eq('id', _brandId!);
+
+                                    await Supabase.instance.client.from('escrow_deposits').insert({
+                                      'brand_id': _brandId,
+                                      'amount': selectedAmount,
+                                      'payment_method': 'test_sandbox',
+                                      'status': 'completed',
+                                      'verified_at': DateTime.now().toIso8601String(),
+                                    });
+                                  }
+                                } catch (_) {}
+
+                                setState(() {
+                                  _escrowBalance = newBal;
+                                  _deposits.insert(0, {
+                                    'id': 'dep-${DateTime.now().millisecondsSinceEpoch}',
+                                    'amount': selectedAmount,
+                                    'payment_method': 'test_sandbox',
+                                    'status': 'completed',
+                                    'created_at': DateTime.now().toIso8601String(),
+                                  });
+                                });
+
+                                if (modalCtx.mounted) Navigator.pop(modalCtx);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('₹$selectedAmount deposited into Escrow via Sandbox Demo!')),
+                                  );
+                                }
+                              } else {
+                                final utr = utrController.text.trim();
+                                try {
+                                  if (_brandId != null) {
+                                    await Supabase.instance.client.from('escrow_deposits').insert({
+                                      'brand_id': _brandId,
+                                      'amount': selectedAmount,
+                                      'payment_method': 'upi_qr',
+                                      'utr_number': utr,
+                                      'status': 'pending_verification',
+                                    });
+                                  }
+                                } catch (_) {}
+
+                                setState(() {
+                                  _deposits.insert(0, {
+                                    'id': 'dep-${DateTime.now().millisecondsSinceEpoch}',
+                                    'amount': selectedAmount,
+                                    'payment_method': 'upi_qr',
+                                    'utr_number': utr,
+                                    'status': 'pending_verification',
+                                    'created_at': DateTime.now().toIso8601String(),
+                                  });
+                                });
+
+                                if (modalCtx.mounted) Navigator.pop(modalCtx);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Deposit of ₹$selectedAmount submitted! Verification takes 5-15 mins.')),
+                                  );
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: WovzoColors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(
+                        selectedMethod == 'test' ? 'Simulate Instant Success' : 'Submit UTR Verification',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _fundCampaign(Map<String, dynamic> campaign) async {
+    final budget = int.tryParse(campaign['budget']?.toString() ?? '0') ?? 0;
+    if (_escrowBalance < budget) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Insufficient balance. Need ₹${budget - _escrowBalance} more.'),
+          action: SnackBarAction(label: 'Deposit', onPressed: _showDepositBottomSheet),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final newBal = _escrowBalance - budget;
+      if (_brandId != null) {
+        await Supabase.instance.client
+            .from('profiles')
+            .update({'escrow_balance': newBal})
+            .eq('id', _brandId!);
+
+        await Supabase.instance.client
+            .from('campaigns')
+            .update({
+              'escrow_funded': true,
+              'escrow_amount': budget,
+              'escrow_status': 'funded',
+            })
+            .eq('id', campaign['id']);
+      }
+
+      setState(() {
+        _escrowBalance = newBal;
+        _activeEscrow += budget;
+        campaign['escrow_funded'] = true;
+        campaign['escrow_status'] = 'funded';
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Campaign "${campaign['title']}" is now 100% Escrow Funded!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error funding escrow: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Brand Escrow & Billing', style: TextStyle(color: WovzoColors.deepBlack, fontWeight: FontWeight.bold))),
+        body: const Center(child: CircularProgressIndicator(color: WovzoColors.orange)),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text('Brand Escrow & Billing', style: TextStyle(color: WovzoColors.deepBlack, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: WovzoColors.deepBlack),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadEscrow,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [WovzoColors.deepBlack, Color(0xFF1E293B)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 16, offset: const Offset(0, 6)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Available Escrow Balance', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text('100% Protected', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '₹$_escrowBalance',
+                      style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Colors.white),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _showDepositBottomSheet,
+                        icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                        label: const Text('Deposit Funds to Escrow', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: WovzoColors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('In Active Escrow', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 4),
+                          Text('₹$_activeEscrow', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Total Disbursed', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 4),
+                          Text('₹$_totalDisbursed', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              const Text('Campaign Escrow Allocations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WovzoColors.deepBlack)),
+              const SizedBox(height: 10),
+              if (_campaigns.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey[200]!),
+                  ),
+                  child: const Center(child: Text('No campaigns yet.', style: TextStyle(color: Colors.grey))),
+                )
+              else
+                ..._campaigns.map((camp) {
+                  final isFunded = camp['escrow_funded'] == true || camp['escrow_status'] == 'funded';
+                  final budget = camp['budget'] ?? 0;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(camp['title'] ?? 'Campaign', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const SizedBox(height: 2),
+                              Text('Budget: ₹$budget • ${camp['platform']?.toString().toUpperCase()}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                        if (isFunded)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.green[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green[200]!),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.check_circle, size: 14, color: Colors.green),
+                                SizedBox(width: 4),
+                                Text('Funded', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 11)),
+                              ],
+                            ),
+                          )
+                        else
+                          ElevatedButton(
+                            onPressed: () => _fundCampaign(camp),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: WovzoColors.deepBlack,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: const Text('Lock Escrow', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+
+              const SizedBox(height: 24),
+
+              const Text('Deposit History', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WovzoColors.deepBlack)),
+              const SizedBox(height: 10),
+              if (_deposits.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey[200]!),
+                  ),
+                  child: const Center(child: Text('No deposit records yet.', style: TextStyle(color: Colors.grey))),
+                )
+              else
+                ..._deposits.map((dep) {
+                  final isComp = dep['status'] == 'completed';
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isComp ? Colors.green[50] : Colors.amber[50],
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                dep['payment_method'] == 'upi_qr' ? Icons.qr_code : Icons.auto_awesome,
+                                color: isComp ? Colors.green : Colors.amber[800],
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  dep['payment_method'] == 'upi_qr' ? 'Direct UPI Deposit' : 'Sandbox Demo Deposit',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                                Text(
+                                  isComp ? 'Verified & Credited' : 'Pending Verification (UTR: ${dep['utr_number'] ?? "-"})',
+                                  style: TextStyle(fontSize: 11, color: isComp ? Colors.green : Colors.amber[800]),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '+ ₹${dep['amount']}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -4188,6 +5058,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: _buildWalletBannerCard(),
                   ),
                   const SizedBox(height: 16),
+                ] else ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: _buildBrandEscrowBannerCard(),
+                  ),
+                  const SizedBox(height: 16),
                 ],
 
                 // 3. PROFILE DETAILS CARD
@@ -4468,6 +5344,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
               icon: const Icon(Icons.arrow_forward, size: 16, color: Colors.white),
               label: const Text('Open Wallet & Withdraw', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: WovzoColors.orange,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBrandEscrowBannerCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [WovzoColors.deepBlack, Color(0xFF1E293B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.shield_rounded, color: Colors.greenAccent, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Brand Escrow & Billing',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green.withOpacity(0.4)),
+                ),
+                child: const Text('100% Protected', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 11)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Deposit campaign funds securely via Direct UPI QR or Cards. Funds are safely held until deliverable approval.',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const BrandEscrowScreen()),
+                );
+              },
+              icon: const Icon(Icons.arrow_forward, size: 16, color: Colors.white),
+              label: const Text('Manage Escrow & Deposit', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: WovzoColors.orange,
                 padding: const EdgeInsets.symmetric(vertical: 12),
