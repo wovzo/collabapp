@@ -367,7 +367,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     side: WidgetStateProperty.all(const BorderSide(color: Color(0xFFE2E8F0))),
                   ),
                   segments: const [
-                    ButtonSegment(value: 'influencer', label: Text('Influencer', style: TextStyle(fontWeight: FontWeight.w600))),
+                    ButtonSegment(value: 'influencer', label: Text('Creator', style: TextStyle(fontWeight: FontWeight.w600))),
                     ButtonSegment(value: 'brand', label: Text('Brand', style: TextStyle(fontWeight: FontWeight.w600))),
                   ],
                   selected: {_selectedRole},
@@ -1696,7 +1696,7 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              'Influencer Applications',
+              'Creator Applications',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
             ),
           ),
