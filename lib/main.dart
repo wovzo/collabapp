@@ -2267,6 +2267,625 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
   }
 }
 
+class CreatorWalletScreen extends StatefulWidget {
+  const CreatorWalletScreen({super.key});
+
+  @override
+  State<CreatorWalletScreen> createState() => _CreatorWalletScreenState();
+}
+
+class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
+  bool _isLoading = true;
+  int _totalEarnings = 0;
+  int _pendingEscrow = 0;
+  int _totalWithdrawn = 0;
+  List<Map<String, dynamic>> _completedCampaigns = [];
+  List<Map<String, dynamic>> _payoutRequests = [];
+
+  // Payout details
+  String _paymentMode = 'upi'; // 'upi' or 'bank'
+  final _upiController = TextEditingController();
+  final _accountHolderController = TextEditingController();
+  final _bankNameController = TextEditingController();
+  final _accountNumberController = TextEditingController();
+  final _ifscController = TextEditingController();
+  bool _isSavingPayment = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWalletData();
+  }
+
+  @override
+  void dispose() {
+    _upiController.dispose();
+    _accountHolderController.dispose();
+    _bankNameController.dispose();
+    _accountNumberController.dispose();
+    _ifscController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadWalletData() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      // 1. Load payout details from metadata
+      final meta = user.userMetadata ?? {};
+      if (meta['upi_id'] != null) _upiController.text = meta['upi_id'].toString();
+      if (meta['account_holder_name'] != null) _accountHolderController.text = meta['account_holder_name'].toString();
+      if (meta['bank_name'] != null) _bankNameController.text = meta['bank_name'].toString();
+      if (meta['account_number'] != null) _accountNumberController.text = meta['account_number'].toString();
+      if (meta['ifsc_code'] != null) _ifscController.text = meta['ifsc_code'].toString();
+
+      // 2. Load applications
+      final apps = await Supabase.instance.client
+          .from('applications')
+          .select('id, status, completed_at, created_at, campaigns(id, title, budget, profiles:brand_id(name))')
+          .eq('influencer_id', user.id);
+
+      int earned = 0;
+      int escrow = 0;
+      List<Map<String, dynamic>> completed = [];
+
+      for (var app in apps) {
+        final c = app['campaigns'] as Map<String, dynamic>? ?? {};
+        final b = int.tryParse(c['budget']?.toString() ?? '0') ?? 0;
+        final status = app['status']?.toString();
+
+        if (status == 'completed') {
+          earned += b;
+          completed.add({
+            'title': c['title'] ?? 'Campaign',
+            'budget': b,
+            'brand': c['profiles']?['name'] ?? 'Brand',
+            'date': app['completed_at'] ?? app['created_at'],
+          });
+        } else if (status == 'accepted' || status == 'submitted') {
+          escrow += b;
+        }
+      }
+
+      // 3. Load payout requests
+      int withdrawn = 0;
+      List<Map<String, dynamic>> payouts = [];
+      try {
+        final payoutResp = await Supabase.instance.client
+            .from('payout_requests')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', ascending: false);
+
+        for (var p in payoutResp) {
+          final amt = int.tryParse(p['amount']?.toString() ?? '0') ?? 0;
+          if (p['status'] == 'processed' || p['status'] == 'pending') {
+            withdrawn += amt;
+          }
+          payouts.add(p);
+        }
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _totalEarnings = earned;
+          _pendingEscrow = escrow;
+          _totalWithdrawn = withdrawn;
+          _completedCampaigns = completed;
+          _payoutRequests = payouts;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  int get _availableBalance => (_totalEarnings - _totalWithdrawn).clamp(0, 999999999);
+
+  Future<void> _savePaymentDetails() async {
+    setState(() => _isSavingPayment = true);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await Supabase.instance.client.auth.updateUser(
+          UserAttributes(
+            data: {
+              'upi_id': _upiController.text.trim(),
+              'account_holder_name': _accountHolderController.text.trim(),
+              'bank_name': _bankNameController.text.trim(),
+              'account_number': _accountNumberController.text.trim(),
+              'ifsc_code': _ifscController.text.trim(),
+            },
+          ),
+        );
+        try {
+          await Supabase.instance.client.from('profiles').update({
+            'upi_id': _upiController.text.trim(),
+            'account_holder_name': _accountHolderController.text.trim(),
+            'bank_name': _bankNameController.text.trim(),
+            'account_number': _accountNumberController.text.trim(),
+            'ifsc_code': _ifscController.text.trim(),
+          }).eq('id', user.id);
+        } catch (_) {}
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Payout accounts saved successfully!')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingPayment = false);
+    }
+  }
+
+  void _showWithdrawBottomSheet() {
+    final amountController = TextEditingController(text: _availableBalance > 0 ? '$_availableBalance' : '');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          left: 20,
+          right: 20,
+          top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Withdraw Funds',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            Text('Available Balance: ₹$_availableBalance', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            const SizedBox(height: 16),
+            const Text(
+              'Amount to Withdraw (₹) *',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: amountController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                prefixText: '₹ ',
+                hintText: 'Min ₹100',
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Text(
+                _paymentMode == 'upi'
+                    ? 'Transfer to UPI: ${_upiController.text.isNotEmpty ? _upiController.text : "Not configured"}'
+                    : 'Transfer to Bank: ${_accountNumberController.text.isNotEmpty ? "••••${_accountNumberController.text.length > 4 ? _accountNumberController.text.substring(_accountNumberController.text.length - 4) : _accountNumberController.text}" : "Not configured"}',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final amt = int.tryParse(amountController.text.trim()) ?? 0;
+                  if (amt < 100) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Minimum withdrawal amount is ₹100')),
+                    );
+                    return;
+                  }
+                  if (amt > _availableBalance) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Amount exceeds available balance')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(ctx);
+                  try {
+                    final user = Supabase.instance.client.auth.currentUser;
+                    if (user != null) {
+                      try {
+                        await Supabase.instance.client.from('payout_requests').insert({
+                          'user_id': user.id,
+                          'amount': amt,
+                          'payout_method': _paymentMode,
+                          'payout_details': _paymentMode == 'upi'
+                              ? {'upi_id': _upiController.text.trim()}
+                              : {'account': _accountNumberController.text.trim(), 'ifsc': _ifscController.text.trim()},
+                          'status': 'pending',
+                        });
+                      } catch (_) {}
+
+                      setState(() {
+                        _totalWithdrawn += amt;
+                        _payoutRequests.insert(0, {
+                          'amount': amt,
+                          'payout_method': _paymentMode,
+                          'status': 'pending',
+                          'created_at': DateTime.now().toIso8601String(),
+                        });
+                      });
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Withdrawal request of ₹$amt submitted! Transferred in 24-48 hrs.')),
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: WovzoColors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Confirm Withdrawal', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Creator Wallet', style: TextStyle(color: WovzoColors.deepBlack, fontWeight: FontWeight.bold))),
+        body: const Center(child: CircularProgressIndicator(color: WovzoColors.orange)),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text('Creator Wallet & Earnings', style: TextStyle(color: WovzoColors.deepBlack, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: WovzoColors.deepBlack),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadWalletData,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Hero Balance Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [WovzoColors.deepBlack, Color(0xFF1E293B)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 16, offset: const Offset(0, 6)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Available to Withdraw', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text('Verified', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '₹$_availableBalance',
+                      style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Colors.white),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _availableBalance >= 100 ? _showWithdrawBottomSheet : null,
+                        icon: const Icon(Icons.arrow_upward, size: 16, color: Colors.white),
+                        label: const Text('Withdraw Funds', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: WovzoColors.orange,
+                          disabledBackgroundColor: Colors.grey[700],
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // 3-way mini stats
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMiniStatCard('Total Earned', '₹$_totalEarnings', Colors.green),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMiniStatCard('In Escrow', '₹$_pendingEscrow', WovzoColors.orange),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMiniStatCard('Withdrawn', '₹$_totalWithdrawn', Colors.blue),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // Payment Details Section
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Payout Account (UPI / Bank)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WovzoColors.deepBlack)),
+                    const SizedBox(height: 4),
+                    const Text('Where should your earnings be sent?', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text('UPI (Instant)'),
+                          selected: _paymentMode == 'upi',
+                          selectedColor: WovzoColors.orange,
+                          labelStyle: TextStyle(color: _paymentMode == 'upi' ? Colors.white : Colors.grey[700], fontWeight: FontWeight.bold, fontSize: 12),
+                          onSelected: (val) {
+                            if (val) setState(() => _paymentMode = 'upi');
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Bank Account (NEFT)'),
+                          selected: _paymentMode == 'bank',
+                          selectedColor: WovzoColors.orange,
+                          labelStyle: TextStyle(color: _paymentMode == 'bank' ? Colors.white : Colors.grey[700], fontWeight: FontWeight.bold, fontSize: 12),
+                          onSelected: (val) {
+                            if (val) setState(() => _paymentMode = 'bank');
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (_paymentMode == 'upi') ...[
+                      TextField(
+                        controller: _upiController,
+                        decoration: InputDecoration(
+                          labelText: 'UPI ID (e.g. 9876543210@paytm, name@okhdfcbank)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                    ] else ...[
+                      TextField(
+                        controller: _accountHolderController,
+                        decoration: InputDecoration(
+                          labelText: 'Account Holder Name',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _bankNameController,
+                        decoration: InputDecoration(
+                          labelText: 'Bank Name (e.g. HDFC Bank, SBI)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _accountNumberController,
+                        decoration: InputDecoration(
+                          labelText: 'Bank Account Number',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _ifscController,
+                        decoration: InputDecoration(
+                          labelText: 'IFSC Code',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isSavingPayment ? null : _savePaymentDetails,
+                        icon: const Icon(Icons.save, size: 16, color: WovzoColors.orange),
+                        label: Text(_isSavingPayment ? 'Saving...' : 'Save Payout Details', style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.orange)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: WovzoColors.orange),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Transaction & Payout Timeline
+              const Text('Transactions & History', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WovzoColors.deepBlack)),
+              const SizedBox(height: 10),
+
+              if (_completedCampaigns.isEmpty && _payoutRequests.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey[200]!),
+                  ),
+                  child: const Center(
+                    child: Text('No transactions yet. Complete campaigns to earn payouts.', style: TextStyle(color: Colors.grey)),
+                  ),
+                )
+              else ...[
+                // Payout Requests
+                ..._payoutRequests.map((req) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Colors.orange[50], shape: BoxShape.circle),
+                              child: const Icon(Icons.arrow_upward, color: WovzoColors.orange, size: 16),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Withdrawal Request (${req['payout_method']?.toString().toUpperCase()})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                Text('Status: ${req['status']?.toString().toUpperCase()}', style: TextStyle(fontSize: 12, color: req['status'] == 'processed' ? Colors.green : Colors.orange)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Text('- ₹${req['amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.redAccent)),
+                      ],
+                    ),
+                  );
+                }),
+                // Completed Campaigns
+                ..._completedCampaigns.map((camp) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Colors.green[50], shape: BoxShape.circle),
+                              child: const Icon(Icons.arrow_downward, color: Colors.green, size: 16),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(camp['title'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                Text('From: ${camp['brand']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Text('+ ₹${camp['budget']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green)),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniStatCard(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 4),
+          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
+    );
+  }
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -2291,6 +2910,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Stats
   int _stat1 = 0;
   int _stat2 = 0;
+  int _totalEarnings = 0;
+  int _availableBalance = 0;
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isUpdatingPassword = false;
@@ -2442,10 +3063,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } else {
         final apps = await Supabase.instance.client
             .from('applications')
-            .select('id, status')
+            .select('id, status, campaigns(budget)')
             .eq('influencer_id', userId);
         _stat1 = apps.length;
-        _stat2 = apps.where((a) => a['status'] == 'accepted').length;
+        _stat2 = apps.where((a) => a['status'] == 'completed' || a['status'] == 'accepted').length;
+
+        int earned = 0;
+        for (var a in apps) {
+          if (a['status'] == 'completed' && a['campaigns'] != null) {
+            final b = int.tryParse(a['campaigns']['budget']?.toString() ?? '0') ?? 0;
+            earned += b;
+          }
+        }
+        _totalEarnings = earned;
+
+        int withdrawn = 0;
+        try {
+          final payouts = await Supabase.instance.client
+              .from('payout_requests')
+              .select('amount, status')
+              .eq('user_id', userId);
+          for (var p in payouts) {
+            if (p['status'] == 'processed' || p['status'] == 'pending') {
+              withdrawn += int.tryParse(p['amount']?.toString() ?? '0') ?? 0;
+            }
+          }
+        } catch (_) {}
+        _availableBalance = (_totalEarnings - withdrawn).clamp(0, 999999999);
       }
     } catch (e) {
       debugPrint('Error loading stats: $e');
@@ -3516,6 +4160,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 const SizedBox(height: 16),
 
+                if (!isBrand) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: _buildWalletBannerCard(),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // 3. PROFILE DETAILS CARD
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -3702,6 +4354,106 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWalletBannerCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [WovzoColors.deepBlack, Color(0xFF1E293B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: WovzoColors.orange.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: WovzoColors.orange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.account_balance_wallet, color: WovzoColors.orange, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'WOVZO Wallet',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green.withOpacity(0.4)),
+                ),
+                child: const Text('Active', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 11)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Total Earned', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const SizedBox(height: 2),
+                  Text('₹$_totalEarnings', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Available to Withdraw', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const SizedBox(height: 2),
+                  Text('₹$_availableBalance', style: const TextStyle(color: WovzoColors.orange, fontSize: 20, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CreatorWalletScreen()),
+                ).then((_) => _loadProfile());
+              },
+              icon: const Icon(Icons.arrow_forward, size: 16, color: Colors.white),
+              label: const Text('Open Wallet & Withdraw', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: WovzoColors.orange,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
