@@ -627,9 +627,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     ),
                   ],
                 ),
-                CircleAvatar(
-                  backgroundColor: WovzoColors.deepBlack,
-                  child: const Text('I', style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded, color: WovzoColors.deepBlack, size: 26),
+                      onPressed: () => showWovzoNotificationsBottomSheet(context, isBrand: false),
+                      tooltip: 'Notifications',
+                    ),
+                    const SizedBox(width: 4),
+                    CircleAvatar(
+                      backgroundColor: WovzoColors.deepBlack,
+                      child: const Text('I', style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
                 )
               ],
             ),
@@ -1409,20 +1420,31 @@ class BrandCampaignsScreen extends StatelessWidget {
                   'My Campaigns',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateCampaignScreen()));
-                    if (result == true) {
-                      // refresh
-                      (context as Element).markNeedsBuild();
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: WovzoColors.orange,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New'),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none_rounded, color: WovzoColors.deepBlack, size: 26),
+                      onPressed: () => showWovzoNotificationsBottomSheet(context, isBrand: true),
+                      tooltip: 'Notifications',
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateCampaignScreen()));
+                        if (result == true) {
+                          // refresh
+                          (context as Element).markNeedsBuild();
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: WovzoColors.orange,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('New'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -4768,6 +4790,400 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 }
 
+void showWovzoNotificationsBottomSheet(BuildContext context, {required bool isBrand}) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => WovzoNotificationsSheet(isBrand: isBrand),
+  );
+}
+
+class WovzoNotificationsSheet extends StatefulWidget {
+  final bool isBrand;
+  const WovzoNotificationsSheet({super.key, required this.isBrand});
+
+  @override
+  State<WovzoNotificationsSheet> createState() => _WovzoNotificationsSheetState();
+}
+
+class _WovzoNotificationsSheetState extends State<WovzoNotificationsSheet> {
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _notifications = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    List<Map<String, dynamic>> list = [];
+
+    // 1. Try fetching from notifications table
+    try {
+      final res = await Supabase.instance.client
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', ascending: false)
+          .limit(25);
+      if (res.isNotEmpty) {
+        list = List<Map<String, dynamic>>.from(res);
+      }
+    } catch (_) {}
+
+    // 2. If table empty or not yet created, derive smart contextual notifications
+    if (list.isEmpty) {
+      try {
+        if (!widget.isBrand) {
+          final apps = await Supabase.instance.client
+              .from('applications')
+              .select('id, status, pitch, submission_url, revision_notes, campaigns(title, budget)')
+              .eq('creator_id', user.id);
+
+          for (final app in (apps as List)) {
+            final camp = app['campaigns'] as Map<String, dynamic>? ?? {};
+            final title = camp['title'] ?? 'Campaign';
+            final status = app['status'];
+
+            if (status == 'accepted') {
+              if (app['submission_url'] != null) {
+                list.add({
+                  'title': 'Proof Submitted: $title',
+                  'message': 'Your proof of work is under brand review. Payment unlocks once approved!',
+                  'type': 'submission',
+                  'created_at': DateTime.now().subtract(const Duration(hours: 1)).toIso8601String(),
+                  'read': false,
+                });
+              } else {
+                list.add({
+                  'title': 'Proposal Approved! 🎉',
+                  'message': 'Brand accepted your pitch for "$title"! Submit your deliverable link in Applications.',
+                  'type': 'success',
+                  'created_at': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
+                  'read': false,
+                });
+              }
+            } else if (status == 'revision') {
+              list.add({
+                'title': 'Revision Requested ✏️',
+                'message': 'Brand requested changes on "$title": ${app['revision_notes'] ?? "Please check and resubmit."}',
+                'type': 'warning',
+                'created_at': DateTime.now().subtract(const Duration(hours: 5)).toIso8601String(),
+                'read': false,
+              });
+            } else if (status == 'completed') {
+              list.add({
+                'title': 'Payout Credited! 💰',
+                'message': 'Deliverable approved for "$title"! ₹${camp['budget'] ?? 0} has been added to your wallet balance.',
+                'type': 'wallet',
+                'created_at': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
+                'read': true,
+              });
+            }
+          }
+        } else {
+          // Brand notifications
+          final camps = await Supabase.instance.client
+              .from('campaigns')
+              .select('id, title, applications(*)')
+              .eq('brand_id', user.id);
+
+          for (final camp in (camps as List)) {
+            final title = camp['title'] ?? 'Campaign';
+            final apps = (camp['applications'] as List?) ?? [];
+            for (final app in apps) {
+              if (app['submission_url'] != null && app['status'] == 'accepted') {
+                list.add({
+                  'title': 'Deliverable Proof Submitted 📸',
+                  'message': 'Creator submitted work for "$title". Review URL to approve or request changes.',
+                  'type': 'submission',
+                  'created_at': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
+                  'read': false,
+                });
+              } else if (app['status'] == 'pending') {
+                list.add({
+                  'title': 'New Pitch Proposal 📩',
+                  'message': 'A creator applied to your campaign "$title". Check applicants tab to hire.',
+                  'type': 'application',
+                  'created_at': DateTime.now().subtract(const Duration(hours: 4)).toIso8601String(),
+                  'read': false,
+                });
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      // System greeting
+      list.add({
+        'title': 'Welcome to WOVZO Collab! 🚀',
+        'message': widget.isBrand
+            ? 'Your brand dashboard is ready. Post campaigns, discover top creators, and track deliverables effortlessly.'
+            : 'Explore brand collaborations, submit proposals, deliver proof, and withdraw your earnings directly via UPI or Bank transfer.',
+        'type': 'info',
+        'created_at': DateTime.now().subtract(const Duration(days: 2)).toIso8601String(),
+        'read': true,
+      });
+    }
+
+    if (mounted) {
+      setState(() {
+        _notifications = list;
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _markAllAsRead() {
+    setState(() {
+      for (var item in _notifications) {
+        item['read'] = true;
+      }
+    });
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        Supabase.instance.client
+            .from('notifications')
+            .update({'read': true})
+            .eq('user_id', user.id)
+            .then((_) {})
+            .catchError((_) {});
+      }
+    } catch (_) {}
+  }
+
+  String _formatTime(String? dateStr) {
+    if (dateStr == null) return 'Recent';
+    try {
+      final dt = DateTime.parse(dateStr);
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      return '${diff.inDays}d ago';
+    } catch (_) {
+      return 'Recent';
+    }
+  }
+
+  IconData _getIconForType(String? type) {
+    switch (type) {
+      case 'wallet':
+        return Icons.account_balance_wallet_rounded;
+      case 'success':
+        return Icons.check_circle_rounded;
+      case 'warning':
+        return Icons.edit_note_rounded;
+      case 'submission':
+        return Icons.camera_alt_rounded;
+      case 'application':
+        return Icons.mail_outline_rounded;
+      default:
+        return Icons.notifications_active_rounded;
+    }
+  }
+
+  Color _getColorForType(String? type) {
+    switch (type) {
+      case 'wallet':
+        return Colors.green;
+      case 'success':
+        return WovzoColors.orange;
+      case 'warning':
+        return Colors.amber[800]!;
+      case 'submission':
+        return Colors.purple;
+      case 'application':
+        return Colors.blue;
+      default:
+        return WovzoColors.deepBlack;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unreadCount = _notifications.where((n) => n['read'] != true).length;
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.78,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 44,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+            child: Row(
+              children: [
+                const Text(
+                  'Notifications',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: WovzoColors.deepBlack,
+                  ),
+                ),
+                if (unreadCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: WovzoColors.orangeLight,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$unreadCount new',
+                      style: const TextStyle(
+                        color: WovzoColors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                if (unreadCount > 0)
+                  TextButton.icon(
+                    onPressed: _markAllAsRead,
+                    icon: const Icon(Icons.done_all, size: 16, color: WovzoColors.orange),
+                    label: const Text(
+                      'Mark all read',
+                      style: TextStyle(color: WovzoColors.orange, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: WovzoColors.orange))
+                : _notifications.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.notifications_off_outlined, size: 54, color: Colors.grey[400]),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'No notifications yet',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Updates on your pitches and campaigns appear here.',
+                              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: _notifications.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1, indent: 64),
+                        itemBuilder: (context, index) {
+                          final item = _notifications[index];
+                          final isUnread = item['read'] != true;
+                          final color = _getColorForType(item['type']);
+                          final icon = _getIconForType(item['type']);
+
+                          return InkWell(
+                            onTap: () {
+                              if (isUnread) {
+                                setState(() {
+                                  item['read'] = true;
+                                });
+                              }
+                            },
+                            child: Container(
+                              color: isUnread ? WovzoColors.orangeLight.withOpacity(0.25) : Colors.transparent,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 20,
+                                    backgroundColor: color.withOpacity(0.12),
+                                    child: Icon(icon, color: color, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                item['title'] ?? 'Notification',
+                                                style: TextStyle(
+                                                  fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                                  fontSize: 14,
+                                                  color: WovzoColors.deepBlack,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              _formatTime(item['created_at']),
+                                              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          item['message'] ?? '',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey[700],
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (isUnread)
+                                    Container(
+                                      margin: const EdgeInsets.only(left: 8, top: 6),
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: WovzoColors.orange,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ChatScreen extends StatefulWidget {
   final String peerId;
   final String peerName;
@@ -4782,6 +5198,7 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, dynamic>> _messages = [];
   late final RealtimeChannel _channel;
   String _myId = '';
+  bool _isUploadingImage = false;
 
   @override
   void initState() {
@@ -4845,10 +5262,155 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _pickAndSendImage() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 75,
+      );
+      if (picked == null) return;
+
+      setState(() => _isUploadingImage = true);
+
+      final bytes = await picked.readAsBytes();
+      final base64String = base64Encode(bytes);
+      final content = '[image]data:image/jpeg;base64,$base64String';
+
+      await Supabase.instance.client.from('messages').insert({
+        'sender_id': _myId,
+        'receiver_id': widget.peerId,
+        'content': content,
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+      }
+    }
+  }
+
+  void _showImagePreviewDialog(String imagePayload) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: imagePayload.startsWith('data:image/')
+                      ? Image.memory(
+                          base64Decode(imagePayload.substring(imagePayload.indexOf(',') + 1)),
+                          fit: BoxFit.contain,
+                        )
+                      : Image.network(imagePayload, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black.withOpacity(0.6),
+                radius: 20,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageContent(String rawContent, bool isMe) {
+    if (rawContent.startsWith('[image]')) {
+      final imagePayload = rawContent.substring(7);
+      Widget img;
+      if (imagePayload.startsWith('data:image/')) {
+        final commaIdx = imagePayload.indexOf(',');
+        final base64Str = commaIdx != -1 ? imagePayload.substring(commaIdx + 1) : imagePayload;
+        try {
+          img = ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.memory(
+              base64Decode(base64Str),
+              width: 220,
+              height: 220,
+              fit: BoxFit.cover,
+            ),
+          );
+        } catch (_) {
+          img = const Icon(Icons.broken_image, color: Colors.white, size: 48);
+        }
+      } else {
+        img = ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.network(
+            imagePayload,
+            width: 220,
+            height: 220,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white, size: 48),
+          ),
+        );
+      }
+
+      return GestureDetector(
+        onTap: () => _showImagePreviewDialog(imagePayload),
+        child: Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            img,
+            Container(
+              margin: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.fullscreen, color: Colors.white, size: 16),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Text(
+      rawContent,
+      style: TextStyle(
+        color: isMe ? Colors.white : WovzoColors.deepBlack,
+        fontSize: 15,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.peerName, style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack))),
+      appBar: AppBar(
+        title: Text(widget.peerName, style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack)),
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        iconTheme: const IconThemeData(color: WovzoColors.deepBlack),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -4858,45 +5420,59 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, index) {
                 final msg = _messages[index];
                 final isMe = msg['sender_id'] == _myId;
+                final isImage = (msg['content'] as String? ?? '').startsWith('[image]');
+
                 return Align(
                   alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: isImage ? const EdgeInsets.all(4) : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
                       color: isMe ? WovzoColors.orange : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(isImage ? 16 : 20),
                     ),
-                    child: Text(
-                      msg['content'],
-                      style: TextStyle(color: isMe ? Colors.white : WovzoColors.deepBlack),
-                    ),
+                    child: _buildMessageContent(msg['content'] ?? '', isMe),
                   ),
                 );
               },
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             color: Colors.white,
             child: SafeArea(
               child: Row(
                 children: [
+                  IconButton(
+                    icon: _isUploadingImage
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: WovzoColors.orange),
+                          )
+                        : const Icon(Icons.photo_library_outlined, color: WovzoColors.orange, size: 24),
+                    onPressed: _isUploadingImage ? null : _pickAndSendImage,
+                    tooltip: 'Attach Image / Screenshot',
+                  ),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: TextField(
                       controller: _msgController,
                       decoration: InputDecoration(
                         hintText: 'Type a message...',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                       ),
+                      onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
                   const SizedBox(width: 8),
                   CircleAvatar(
                     backgroundColor: WovzoColors.orange,
                     child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white),
+                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
                       onPressed: _sendMessage,
                     ),
                   )
