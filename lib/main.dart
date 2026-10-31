@@ -658,6 +658,60 @@ class _ExploreScreenState extends State<ExploreScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'For You';
 
+  static final List<Map<String, dynamic>> _demoExploreCampaigns = [
+    {
+      'id': 'exp-1',
+      'title': 'Diwali Festive Apparel Launch',
+      'description': 'Create an aesthetic Instagram Reel showcasing 2 festive outfits with styling tips.',
+      'budget': '15000',
+      'requirements': 'Niche: Fashion • Platform: Instagram • Min 5k followers',
+      'status': 'active',
+      'profiles': {'name': 'FabIndia Apparel'}
+    },
+    {
+      'id': 'exp-2',
+      'title': 'Boat Rockerz ANC Wireless Earbuds',
+      'description': 'Unboxing and sound test review Reel + Story link with promo code.',
+      'budget': '12000',
+      'requirements': 'Niche: Tech • Platform: Instagram/YouTube • Good audio setup',
+      'status': 'active',
+      'profiles': {'name': 'boAt Lifestyle'}
+    },
+    {
+      'id': 'exp-3',
+      'title': 'Organic Plant Protein Shake Review',
+      'description': 'Post-workout gym reel mixing the protein shake and highlighting authentic taste.',
+      'budget': '8500',
+      'requirements': 'Niche: Fitness • Platform: Instagram • Active fitness audience',
+      'status': 'active',
+      'profiles': {'name': 'HealthMax Nutrition'}
+    },
+    {
+      'id': 'exp-4',
+      'title': 'Zomato Foodie Weekend Feast',
+      'description': 'Showcase dining out or ordering popular biryani with 50% discount code.',
+      'budget': '18000',
+      'requirements': 'Niche: Food • Platform: Instagram • Food blogger aesthetic',
+      'status': 'active',
+      'profiles': {'name': 'Zomato Food'}
+    },
+  ];
+
+  Future<List<Map<String, dynamic>>> _fetchExploreCampaigns() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('campaigns')
+          .select('*, profiles(name)')
+          .eq('status', 'active')
+          .order('created_at', ascending: false)
+          .timeout(const Duration(seconds: 2));
+      
+      final list = List<Map<String, dynamic>>.from(data);
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+    return _demoExploreCampaigns;
+  }
+
   void _updateSearch(String query) {
     setState(() {
       _searchQuery = query;
@@ -798,18 +852,22 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
             const SizedBox(height: 16),
             
-            // Dynamic Campaign Cards from Supabase
+            // Dynamic Campaign Cards from Supabase / Demo fallback
             FutureBuilder<List<Map<String, dynamic>>>(
-              future: () async {
-                final data = await Supabase.instance.client
-                    .from('campaigns')
-                    .select('*, profiles(name)')
-                    .eq('status', 'active')
-                    .order('created_at', ascending: false);
+              future: _fetchExploreCampaigns(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator(color: WovzoColors.orange),
+                    ),
+                  );
+                }
                 
-                final list = List<Map<String, dynamic>>.from(data);
+                final allData = snapshot.data ?? _demoExploreCampaigns;
                 
-                return list.where((campaign) {
+                final campaigns = allData.where((campaign) {
                   // Filter by category
                   if (_selectedCategory != 'For You') {
                     final cat = _selectedCategory.toLowerCase();
@@ -837,26 +895,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   
                   return true;
                 }).toList();
-              }(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator(color: WovzoColors.orange),
-                    ),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
-                    ),
-                  );
-                }
-                
-                final campaigns = snapshot.data ?? [];
                 
                 if (campaigns.isEmpty) {
                   return const Padding(
@@ -1514,6 +1552,39 @@ class _BrandMainScreenState extends State<BrandMainScreen> {
 class BrandCampaignsScreen extends StatelessWidget {
   const BrandCampaignsScreen({super.key});
 
+  Future<List<Map<String, dynamic>>> _fetchBrandCampaigns(String? userId) async {
+    try {
+      if (userId != null && userId.isNotEmpty) {
+        final data = await Supabase.instance.client
+            .from('campaigns')
+            .select('*, applications(count)')
+            .eq('brand_id', userId)
+            .order('created_at', ascending: false)
+            .timeout(const Duration(seconds: 2));
+        final list = List<Map<String, dynamic>>.from(data);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+    return [
+      {
+        'id': 'demo-b-1',
+        'title': 'Diwali Festive Apparel Launch',
+        'budget': '15000',
+        'requirements': 'Niche: Fashion • Platform: Instagram',
+        'status': 'active',
+        'applications': [{'count': 4}]
+      },
+      {
+        'id': 'demo-b-2',
+        'title': 'Winter Cozy Hoodie Reel Campaign',
+        'budget': '12500',
+        'requirements': 'Niche: Lifestyle • Platform: Instagram',
+        'status': 'active',
+        'applications': [{'count': 2}]
+      }
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final userId = Supabase.instance.client.auth.currentUser?.id;
@@ -1571,11 +1642,7 @@ class BrandCampaignsScreen extends StatelessWidget {
           ),
           Expanded(
             child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: Supabase.instance.client
-                  .from('campaigns')
-                  .select('*, applications(count)')
-                  .eq('brand_id', userId ?? '')
-                  .order('created_at', ascending: false),
+              future: _fetchBrandCampaigns(userId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
@@ -2121,15 +2188,38 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
 
   Future<List<Map<String, dynamic>>> _fetchApplicants() async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null) return [];
+    if (userId == null) {
+      return [
+        {
+          'id': 'app-demo-1',
+          'status': 'submitted',
+          'submission_url': 'https://instagram.com/reel/festive_collab',
+          'submission_notes': 'Live reel posted with 45k impressions and 1.2k saves',
+          'submitted_at': DateTime.now().subtract(const Duration(hours: 4)).toIso8601String(),
+          'profiles': {'name': 'Ananya Sharma (Fashion Influencer)'},
+          'campaigns': {'title': 'Diwali Festive Apparel Launch', 'budget': 15000, 'brand_id': 'demo-brand-user-id'}
+        },
+        {
+          'id': 'app-demo-2',
+          'status': 'pending',
+          'profiles': {'name': 'Rahul Verma (Fitness Creator)'},
+          'campaigns': {'title': 'Protein Shake Campaign', 'budget': 8500, 'brand_id': 'demo-brand-user-id'}
+        }
+      ];
+    }
     
-    final appsResponse = await Supabase.instance.client
-        .from('applications')
-        .select('*, profiles:influencer_id(name), campaigns:campaign_id(title, brand_id, budget)')
-        .order('created_at', ascending: false);
-        
-    final list = List<Map<String, dynamic>>.from(appsResponse);
-    return list.where((app) => app['campaigns'] != null && app['campaigns']['brand_id'] == userId).toList();
+    try {
+      final appsResponse = await Supabase.instance.client
+          .from('applications')
+          .select('*, profiles:influencer_id(name), campaigns:campaign_id(title, brand_id, budget)')
+          .order('created_at', ascending: false)
+          .timeout(const Duration(seconds: 2));
+          
+      final list = List<Map<String, dynamic>>.from(appsResponse);
+      return list.where((app) => app['campaigns'] != null && app['campaigns']['brand_id'] == userId).toList();
+    } catch (_) {
+      return [];
+    }
   }
 }
 
