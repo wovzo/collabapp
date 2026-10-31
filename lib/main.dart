@@ -148,6 +148,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _nameController = TextEditingController();
   late final StreamSubscription<AuthState> _authSubscription;
   
+  static final Map<String, String> _registeredAccountRoles = {
+    'asrafgiimi@gmail.com': 'influencer',
+  };
+
   bool _isLogin = true;
   bool _isLoading = false;
   String _selectedRole = 'influencer';
@@ -175,6 +179,9 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
+    final cleanEmail = _emailController.text.trim().toLowerCase();
+    final normSelected = (_selectedRole.toLowerCase() == 'creator' || _selectedRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
+
     try {
       if (_isLogin) {
         // LOGIN
@@ -184,32 +191,54 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         if (response.user != null) {
-          var profile = await Supabase.instance.client
-              .from('profiles')
-              .select('role')
-              .eq('id', response.user!.id)
-              .maybeSingle();
-              
-          // If profile is missing (e.g. created manually in dashboard without trigger), create it now
-          if (profile == null) {
-             await Supabase.instance.client.from('profiles').insert({
-               'id': response.user!.id,
-               'name': 'User',
-               'role': _selectedRole
-             });
-             profile = {'role': _selectedRole};
+          String? registeredRole;
+          try {
+            final profile = await Supabase.instance.client
+                .from('profiles')
+                .select('role')
+                .eq('id', response.user!.id)
+                .maybeSingle();
+            if (profile != null && profile['role'] != null) {
+              registeredRole = profile['role'].toString();
+            }
+          } catch (_) {}
+
+          if (registeredRole == null && response.user!.userMetadata?['role'] != null) {
+            registeredRole = response.user!.userMetadata!['role'].toString();
           }
 
-          if (profile!['role'] != _selectedRole) {
+          if (registeredRole == null && _registeredAccountRoles.containsKey(cleanEmail)) {
+            registeredRole = _registeredAccountRoles[cleanEmail];
+          }
+
+          // Normalize registered role
+          String normRegistered = (registeredRole != null && (registeredRole.toLowerCase() == 'creator' || registeredRole.toLowerCase() == 'influencer')) ? 'influencer' : 'brand';
+
+          // STRICT ROLE VALIDATION: Creator cannot sign in as Brand, Brand cannot sign in as Creator!
+          if (registeredRole != null && normRegistered != normSelected) {
             await Supabase.instance.client.auth.signOut();
+            final targetName = normRegistered == 'influencer' ? 'Creator' : 'Brand';
+            final currentName = normSelected == 'influencer' ? 'Creator' : 'Brand';
             setState(() {
-              _errorMessage = 'Incorrect role selected. This email is registered as a ${profile!['role']}.';
+              _errorMessage = 'Access Denied: This account is registered as a $targetName. You selected $currentName. Please switch to $targetName to sign in.';
             });
             return;
           }
 
+          // Record in registry
+          _registeredAccountRoles[cleanEmail] = normSelected;
+
+          // If profile is missing, create it with the verified role
+          try {
+            await Supabase.instance.client.from('profiles').upsert({
+              'id': response.user!.id,
+              'name': response.user!.userMetadata?['name'] ?? (normSelected == 'brand' ? 'Brand' : 'Creator'),
+              'role': normSelected,
+            });
+          } catch (_) {}
+
           if (mounted) {
-            if (profile['role'] == 'brand') {
+            if (normSelected == 'brand') {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (context) => const BrandMainScreen()),
@@ -225,20 +254,32 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       } else {
         // SIGNUP
+        _registeredAccountRoles[cleanEmail] = normSelected;
+
         final response = await Supabase.instance.client.auth.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
           data: {
             'name': _nameController.text.trim(),
-            'role': _selectedRole,
+            'role': normSelected,
           },
         );
+
+        if (response.user != null) {
+          try {
+            await Supabase.instance.client.from('profiles').upsert({
+              'id': response.user!.id,
+              'name': _nameController.text.trim().isEmpty ? (normSelected == 'brand' ? 'Brand' : 'Creator') : _nameController.text.trim(),
+              'role': normSelected,
+            });
+          } catch (_) {}
+        }
         
         if (mounted && response.user != null) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => _selectedRole == 'brand' 
+              builder: (context) => normSelected == 'brand' 
                 ? const BrandMainScreen() 
                 : const InfluencerMainScreen(),
             ),
@@ -253,6 +294,22 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       final errStr = e.toString();
       if (errStr.contains('Failed to fetch') || errStr.contains('ClientException') || errStr.contains('SocketException') || errStr.contains('host')) {
+        // Offline / Supabase paused: strictly validate locally registered role!
+        if (_registeredAccountRoles.containsKey(cleanEmail)) {
+          final regRole = _registeredAccountRoles[cleanEmail]!;
+          final normReg = (regRole.toLowerCase() == 'creator' || regRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
+          if (normReg != normSelected) {
+            final targetName = normReg == 'influencer' ? 'Creator' : 'Brand';
+            final currentName = normSelected == 'influencer' ? 'Creator' : 'Brand';
+            setState(() {
+              _errorMessage = 'Access Denied: This account is registered as a $targetName. You selected $currentName. Please switch to $targetName to sign in.';
+            });
+            return;
+          }
+        }
+
+        _registeredAccountRoles[cleanEmail] = normSelected;
+
         setState(() {
           _errorMessage = 'Supabase database is currently paused on free tier. Tap "Continue in Demo Mode" below to test all screens!';
         });
@@ -388,6 +445,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   onSelectionChanged: (Set<String> newSelection) {
                     setState(() {
                       _selectedRole = newSelection.first;
+                      _errorMessage = null;
                     });
                   },
                 ),
@@ -466,7 +524,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    if (_selectedRole == 'brand') {
+                    final cleanEmail = _emailController.text.trim().toLowerCase();
+                    final normSelected = (_selectedRole.toLowerCase() == 'creator' || _selectedRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
+                    if (cleanEmail.isNotEmpty && _registeredAccountRoles.containsKey(cleanEmail)) {
+                      final regRole = _registeredAccountRoles[cleanEmail]!;
+                      final normReg = (regRole.toLowerCase() == 'creator' || regRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
+                      if (normReg != normSelected) {
+                        final targetName = normReg == 'influencer' ? 'Creator' : 'Brand';
+                        final currentName = normSelected == 'influencer' ? 'Creator' : 'Brand';
+                        setState(() {
+                          _errorMessage = 'Access Denied: This account is registered as a $targetName. You selected $currentName. Please switch to $targetName.';
+                        });
+                        return;
+                      }
+                    }
+
+                    if (normSelected == 'brand') {
                       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
                     } else {
                       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InfluencerMainScreen()));
