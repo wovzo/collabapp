@@ -5450,6 +5450,178 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _openAdminConsoleSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 20,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: WovzoColors.orangeLight,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.admin_panel_settings, color: WovzoColors.orange, size: 22),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Master Admin Console',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Platform KPIs
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('PLATFORM METRICS', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text('₹4,85,000', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                                Text('Total Volume', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text('1,420 Users', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                                Text('Active Accounts', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text('₹42,800', style: TextStyle(color: Color(0xFF34D399), fontSize: 18, fontWeight: FontWeight.bold)),
+                                Text('Pending Payouts', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+                  const Text('App & APK Remote Controls', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 10),
+
+                  // Maintenance Mode Toggle
+                  SwitchListTile(
+                    title: const Text('Maintenance Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('Temporarily lock Web & APK with maintenance screen', style: TextStyle(fontSize: 12)),
+                    value: false,
+                    activeColor: WovzoColors.orange,
+                    onChanged: (val) {
+                      setModalState(() {});
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Maintenance Mode ${val ? 'Activated' : 'Deactivated'}')),
+                      );
+                    },
+                    contentPadding: EdgeInsets.zero,
+                  ),
+
+                  // Force Update APK
+                  SwitchListTile(
+                    title: const Text('Force Update APK (v1.2.0)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('Require users on old APK to download update', style: TextStyle(fontSize: 12)),
+                    value: true,
+                    activeColor: WovzoColors.orange,
+                    onChanged: (val) {
+                      setModalState(() {});
+                    },
+                    contentPadding: EdgeInsets.zero,
+                  ),
+
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('All pending UPI Payouts Approved! UTR generated.')),
+                        );
+                      },
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text('1-Tap Approve Pending Creator Payouts (₹42,800)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Opening Web Admin: wovzo.com/collab/admin/')),
+                        );
+                      },
+                      icon: const Icon(Icons.open_in_browser, size: 18, color: WovzoColors.deepBlack),
+                      label: const Text('Open Full Web Admin Dashboard', style: TextStyle(color: WovzoColors.deepBlack, fontWeight: FontWeight.bold)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _confirmLogout() {
     showDialog(
       context: context,
@@ -5851,6 +6023,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
 
                 const SizedBox(height: 24),
+
+                // MASTER ADMIN CONSOLE BUTTON
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openAdminConsoleSheet(context),
+                      icon: const Icon(Icons.admin_panel_settings_outlined, color: WovzoColors.deepBlack),
+                      label: const Text(
+                        'Master Admin Console',
+                        style: TextStyle(
+                          color: WovzoColors.deepBlack,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        backgroundColor: Colors.grey.shade50,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
 
                 // 5. LOGOUT BUTTON
                 Padding(
