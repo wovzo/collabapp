@@ -150,6 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
   
   static final Map<String, String> _registeredAccountRoles = {
     'asrafgiimi@gmail.com': 'influencer',
+    'asrafgiimi': 'influencer',
   };
 
   bool _isLogin = true;
@@ -287,12 +288,8 @@ class _LoginScreenState extends State<LoginScreen> {
         }
         return;
       }
-    } on AuthException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-      });
     } catch (e) {
-      final errStr = e.toString();
+      final errStr = e is AuthException ? e.message : e.toString();
       if (errStr.contains('Failed to fetch') || errStr.contains('ClientException') || errStr.contains('SocketException') || errStr.contains('host')) {
         // Offline / Supabase paused: strictly validate locally registered role!
         if (_registeredAccountRoles.containsKey(cleanEmail)) {
@@ -308,14 +305,20 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
 
+        // Auto bypass into dashboard since role matches or is valid demo
         _registeredAccountRoles[cleanEmail] = normSelected;
 
-        setState(() {
-          _errorMessage = 'Supabase database is currently paused on free tier. Tap "Continue in Demo Mode" below to test all screens!';
-        });
+        if (mounted) {
+          if (normSelected == 'brand') {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
+          } else {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InfluencerMainScreen()));
+          }
+        }
+        return;
       } else {
         setState(() {
-          _errorMessage = 'Error: $e';
+          _errorMessage = errStr;
         });
       }
     } finally {
