@@ -2264,6 +2264,47 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
     );
   }
 
+  Future<List<Map<String, dynamic>>> _fetchApplications() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      return [
+        {
+          'id': 'demo-app-1',
+          'status': 'accepted',
+          'submission_url': 'https://instagram.com/reel/demo_collab_wovzo',
+          'submission_notes': 'Demo deliverable submission ready for brand review',
+          'submitted_at': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
+          'campaigns': {
+            'id': 'c-1',
+            'title': 'Diwali Festive Apparel Launch',
+            'budget': 15000,
+            'profiles': {'name': 'FabIndia Apparel'}
+          }
+        },
+        {
+          'id': 'demo-app-2',
+          'status': 'pending',
+          'campaigns': {
+            'id': 'c-2',
+            'title': 'Organic Protein Shake Reel Campaign',
+            'budget': 8500,
+            'profiles': {'name': 'HealthMax Nutrition'}
+          }
+        }
+      ];
+    }
+    try {
+      final res = await Supabase.instance.client
+          .from('applications')
+          .select('*, campaigns(*, profiles(name))')
+          .eq('influencer_id', user.id)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(res);
+    } catch (e) {
+      return [];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -2283,11 +2324,7 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
           ),
           Expanded(
             child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: Supabase.instance.client
-                  .from('applications')
-                  .select('*, campaigns(*, profiles(name))')
-                  .eq('influencer_id', Supabase.instance.client.auth.currentUser!.id)
-                  .order('created_at', ascending: false),
+              future: _fetchApplications(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
@@ -6126,7 +6163,7 @@ class _CreateCampaignScreenState extends State<CreateCampaignScreen> {
     }
     setState(() => _isLoading = true);
     try {
-      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final userId = Supabase.instance.client.auth.currentUser?.id ?? 'demo-brand-user-id';
       final requirementsString = 'Niche: ${_nicheController.text.trim()} • Platform: ${_platformController.text.trim().isEmpty ? 'Instagram' : _platformController.text.trim()}';
       await Supabase.instance.client.from('campaigns').insert({
         'brand_id': userId,
@@ -6668,7 +6705,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _myId = Supabase.instance.client.auth.currentUser!.id;
+    _myId = Supabase.instance.client.auth.currentUser?.id ?? 'demo-user-id';
     _fetchMessages();
     _setupSubscription();
   }
