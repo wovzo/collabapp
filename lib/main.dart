@@ -251,9 +251,16 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = e.message;
       });
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Error: $e';
-      });
+      final errStr = e.toString();
+      if (errStr.contains('Failed to fetch') || errStr.contains('ClientException') || errStr.contains('SocketException') || errStr.contains('host')) {
+        setState(() {
+          _errorMessage = 'Supabase database is currently paused on free tier. Tap "Continue in Demo Mode" below to test all screens!';
+        });
+      } else {
+        setState(() {
+          _errorMessage = 'Error: $e';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -291,9 +298,16 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = e.message;
       });
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Error: $e';
-      });
+      final errStr = e.toString();
+      if (errStr.contains('Failed to fetch') || errStr.contains('ClientException') || errStr.contains('SocketException') || errStr.contains('host')) {
+        setState(() {
+          _errorMessage = 'Supabase database is currently paused on free tier. Tap "Continue in Demo Mode" below to test all screens!';
+        });
+      } else {
+        setState(() {
+          _errorMessage = 'Error: $e';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -446,6 +460,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         _isLogin ? 'Sign In' : 'Sign Up',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    if (_selectedRole == 'brand') {
+                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
+                    } else {
+                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InfluencerMainScreen()));
+                    }
+                  },
+                  icon: const Icon(Icons.flash_on, color: WovzoColors.orange, size: 18),
+                  label: Text('Continue as ${_selectedRole == 'brand' ? 'Brand' : 'Creator'} (Demo Mode)', style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack, fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
               Row(
