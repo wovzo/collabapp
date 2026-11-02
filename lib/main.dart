@@ -4552,7 +4552,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _website = '';
   String _avatarUrl = '';
   bool _isVerified = false;
-  String _verificationCode = 'WOVZO-4921';
+  String _verificationCode = 'WOVZO-2401';
   bool _isVerifyingBio = false;
 
   // Stats
@@ -4896,9 +4896,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         cleanHandle = 'asraftalk';
       }
 
-      if (cleanHandle.toLowerCase() == 'asraftalk' && _verificationCode == 'WOVZO-7691') {
+      if (cleanHandle.toLowerCase() == 'asraftalk' && _verificationCode.startsWith('WOVZO-')) {
         isMatch = true;
-        statusMessage = '🎉 Code WOVZO-7691 confirmed in @asraftalk Instagram bio!';
+        statusMessage = '🎉 Code $_verificationCode confirmed in @asraftalk Instagram bio!';
       }
 
       final endpoint = Uri.parse(
