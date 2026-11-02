@@ -147,6 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
+  final _brandNameController = TextEditingController();
   final _instagramController = TextEditingController();
   final _youtubeController = TextEditingController();
   late final StreamSubscription<AuthState> _authSubscription;
@@ -263,12 +264,19 @@ class _LoginScreenState extends State<LoginScreen> {
         final vCode = 'WOVZO-${1000 + (DateTime.now().millisecondsSinceEpoch % 9000)}';
         final igHandle = _instagramController.text.trim();
         final ytChannel = _youtubeController.text.trim();
+        final brandName = _brandNameController.text.trim();
+        final contactName = _nameController.text.trim();
+        final displayName = normSelected == 'brand'
+            ? (brandName.isNotEmpty ? brandName : (contactName.isNotEmpty ? contactName : 'Brand'))
+            : (contactName.isNotEmpty ? contactName : 'Creator');
 
         final response = await Supabase.instance.client.auth.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
           data: {
-            'name': _nameController.text.trim(),
+            'name': displayName,
+            'brand_name': normSelected == 'brand' ? brandName : '',
+            'contact_name': contactName,
             'role': normSelected,
             'instagram': igHandle,
             'youtube': ytChannel,
@@ -283,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
           try {
             await Supabase.instance.client.from('profiles').upsert({
               'id': response.user!.id,
-              'name': _nameController.text.trim().isEmpty ? (normSelected == 'brand' ? 'Brand' : 'Creator') : _nameController.text.trim(),
+              'name': displayName,
               'role': normSelected,
               'instagram': igHandle,
               'youtube': ytChannel,
@@ -471,17 +479,45 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
               if (!_isLogin) ...[
-                TextField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Full Name',
-                    prefixIcon: const Icon(Icons.person_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                if (_selectedRole == 'brand') ...[
+                  TextField(
+                    controller: _brandNameController,
+                    decoration: InputDecoration(
+                      labelText: 'Brand / Company Name',
+                      hintText: 'e.g. FabIndia, boAt Lifestyle',
+                      prefixIcon: const Icon(Icons.business_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Your Full Name (Brand Manager / Founder)',
+                      hintText: 'e.g. Rahul Sharma',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  TextField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Full Name',
+                      hintText: 'e.g. Asraf Ali',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ],
               
               TextField(
