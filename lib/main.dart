@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 
 ImageProvider? _getAvatarImageProvider(String url) {
   if (url.isEmpty) return null;
@@ -4868,9 +4869,121 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _verifyBioCode() async {
-    setState(() => _isVerifyingBio = true);
-    await Future.delayed(const Duration(milliseconds: 1800));
+    final handle = _instagramController.text.trim().isNotEmpty 
+        ? _instagramController.text.trim() 
+        : _youtubeController.text.trim();
+    final platform = _instagramController.text.trim().isNotEmpty ? 'instagram' : 'youtube';
 
+    if (handle.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          content: const Text('Please enter your Instagram or YouTube handle first before verifying.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isVerifyingBio = true);
+
+    bool isMatch = false;
+    String statusMessage = '';
+
+    try {
+      final cleanHandle = handle.replaceAll('@', '').trim();
+      final endpoint = Uri.parse(
+        'https://wovzo.com/collab/verify_bio.php?platform=$platform&handle=${Uri.encodeComponent(cleanHandle)}&code=${Uri.encodeComponent(_verificationCode)}',
+      );
+
+      final response = await http.get(endpoint).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map && data['verified'] == true) {
+          isMatch = true;
+          statusMessage = data['message']?.toString() ?? 'Code matched!';
+        } else if (data is Map && data['message'] != null) {
+          statusMessage = data['message'].toString();
+        }
+      }
+    } catch (e) {
+      debugPrint('Bio verification server request error: $e');
+    }
+
+    // Client-side fallback check if live endpoint was unreachable
+    if (!isMatch && statusMessage.isEmpty) {
+      try {
+        final cleanHandle = handle.replaceAll('@', '').trim();
+        final proxyUrl = platform == 'youtube'
+            ? Uri.parse('https://api.allorigins.win/raw?url=${Uri.encodeComponent("https://www.youtube.com/@$cleanHandle")}')
+            : Uri.parse('https://api.allorigins.win/raw?url=${Uri.encodeComponent("https://imginn.com/$cleanHandle/")}');
+
+        final proxyRes = await http.get(proxyUrl).timeout(const Duration(seconds: 8));
+        if (proxyRes.statusCode == 200 && proxyRes.body.toUpperCase().contains(_verificationCode.toUpperCase())) {
+          isMatch = true;
+          statusMessage = 'Found $_verificationCode in your $platform profile!';
+        } else {
+          statusMessage = 'Code $_verificationCode was NOT found in your $platform bio.';
+        }
+      } catch (_) {
+        statusMessage = 'Could not scan bio automatically. Please verify your account is Public and try again.';
+      }
+    }
+
+    if (!isMatch) {
+      // KEEP UNVERIFIED! DO NOT VERIFY!
+      if (mounted) {
+        setState(() {
+          _isVerified = false;
+          _isVerifyingBio = false;
+        });
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.cancel, color: Colors.redAccent, size: 24),
+                SizedBox(width: 8),
+                Text('Verification Failed', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  statusMessage.isNotEmpty
+                      ? statusMessage
+                      : 'Code $_verificationCode was not found in your bio.',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'How to fix:',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '1. Copy code: $_verificationCode\n2. Open $platform and paste it into your bio or description\n3. Tap Save in $platform and wait 15 seconds\n4. Tap "Check & Verify Bio Now" again',
+                  style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK, Got it', style: TextStyle(color: WovzoColors.orange, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    // Success: persist verified state
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
@@ -4878,8 +4991,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           UserAttributes(
             data: {
               'is_verified': true,
-              'instagram_verified': true,
-              'youtube_verified': _youtube.isNotEmpty,
+              'instagram_verified': platform == 'instagram' || _instagram.isNotEmpty,
+              'youtube_verified': platform == 'youtube' || _youtube.isNotEmpty,
               'verification_code': _verificationCode,
             },
           ),
@@ -4901,15 +5014,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _isVerifyingBio = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.green,
+        SnackBar(
+          backgroundColor: Colors.green.shade700,
           behavior: SnackBarBehavior.floating,
           content: Row(
             children: [
-              Icon(Icons.verified, color: Colors.white),
-              SizedBox(width: 8),
+              const Icon(Icons.verified, color: Colors.white),
+              const SizedBox(width: 8),
               Expanded(
-                child: Text('🎉 Verified! Bio code matched. Verified Blue Badge is now active!'),
+                child: Text('🎉 Verified! Bio code $_verificationCode confirmed. Verified Blue Badge activated!'),
               ),
             ],
           ),
