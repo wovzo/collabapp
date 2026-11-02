@@ -2083,10 +2083,23 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      influencerName,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WovzoColors.deepBlack),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          influencerName,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: WovzoColors.deepBlack),
+                                        ),
+                                        if (profile['is_verified'] == true || profile['is_verified']?.toString() == 'true') ...[
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.verified, size: 16, color: Color(0xFF38BDF8)),
+                                        ],
+                                      ],
                                     ),
+                                    if (profile['instagram'] != null && profile['instagram'].toString().isNotEmpty)
+                                      Text(
+                                        profile['instagram'].toString(),
+                                        style: const TextStyle(fontSize: 12, color: Color(0xFFE11D48), fontWeight: FontWeight.w500),
+                                      ),
                                     Text(
                                       'For: ${campaign['title'] ?? 'Campaign'}',
                                       style: TextStyle(fontSize: 13, color: Colors.grey[600]),
@@ -2302,13 +2315,13 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
           'submission_url': 'https://instagram.com/reel/festive_collab',
           'submission_notes': 'Live reel posted with 45k impressions and 1.2k saves',
           'submitted_at': DateTime.now().subtract(const Duration(hours: 4)).toIso8601String(),
-          'profiles': {'name': 'Ananya Sharma (Fashion Influencer)'},
+          'profiles': {'name': 'Ananya Sharma (Fashion Influencer)', 'instagram': '@ananyasharma_fit', 'is_verified': true},
           'campaigns': {'title': 'Diwali Festive Apparel Launch', 'budget': 15000, 'brand_id': 'demo-brand-user-id'}
         },
         {
           'id': 'app-demo-2',
           'status': 'pending',
-          'profiles': {'name': 'Rahul Verma (Fitness Creator)'},
+          'profiles': {'name': 'Rahul Verma (Fitness Creator)', 'instagram': '@rahulverma_fit', 'is_verified': true},
           'campaigns': {'title': 'Protein Shake Campaign', 'budget': 8500, 'brand_id': 'demo-brand-user-id'}
         }
       ];
@@ -2317,7 +2330,7 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
     try {
       final appsResponse = await Supabase.instance.client
           .from('applications')
-          .select('*, profiles:influencer_id(name), campaigns:campaign_id(title, brand_id, budget)')
+          .select('*, profiles:influencer_id(name, instagram, is_verified), campaigns:campaign_id(title, brand_id, budget)')
           .order('created_at', ascending: false)
           .timeout(const Duration(seconds: 2));
           
@@ -5426,10 +5439,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 14),
                     TextField(
                       controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Full Name / Brand Name',
-                        prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: _role == 'brand' ? 'Brand / Company Name' : 'Full Name',
+                        prefixIcon: Icon(_role == 'brand' ? Icons.business : Icons.person_outline),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -5443,39 +5456,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    DropdownButtonFormField<String>(
-                      value: _niches.contains(_nicheController.text) ? _nicheController.text : _niches.first,
-                      decoration: const InputDecoration(
-                        labelText: 'Category / Niche',
-                        prefixIcon: Icon(Icons.category_outlined),
-                        border: OutlineInputBorder(),
+                    if (_role != 'brand') ...[
+                      DropdownButtonFormField<String>(
+                        value: _niches.contains(_nicheController.text) ? _nicheController.text : _niches.first,
+                        decoration: const InputDecoration(
+                          labelText: 'Category / Niche',
+                          prefixIcon: Icon(Icons.category_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                        items: _niches.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() => _nicheController.text = val);
+                          }
+                        },
                       ),
-                      items: _niches.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setModalState(() => _nicheController.text = val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _instagramController,
-                      decoration: const InputDecoration(
-                        labelText: 'Instagram Handle (@username)',
-                        prefixIcon: Icon(Icons.camera_alt_outlined),
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _instagramController,
+                        decoration: const InputDecoration(
+                          labelText: 'Instagram Handle (@username)',
+                          prefixIcon: Icon(Icons.camera_alt_outlined),
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _youtubeController,
-                      decoration: InputDecoration(
-                        labelText: _role == 'brand' ? 'Company Website' : 'YouTube Channel / Link',
-                        prefixIcon: const Icon(Icons.link),
-                        border: const OutlineInputBorder(),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _youtubeController,
+                        decoration: const InputDecoration(
+                          labelText: 'YouTube Channel / Link',
+                          prefixIcon: Icon(Icons.play_circle_outline),
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
+                      const SizedBox(height: 14),
+                    ] else ...[
+                      TextField(
+                        controller: _websiteController,
+                        decoration: const InputDecoration(
+                          labelText: 'Company Website (https://...)',
+                          prefixIcon: Icon(Icons.language),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     TextField(
                       controller: _locationController,
                       decoration: const InputDecoration(
@@ -6126,23 +6151,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const Divider(height: 1),
                         const SizedBox(height: 8),
-                        _buildDetailTile(
-                          icon: Icons.category_outlined,
-                          title: 'Primary Niche',
-                          value: _niche,
-                        ),
-                        _buildDetailTile(
-                          icon: Icons.camera_alt_outlined,
-                          title: 'Instagram',
-                          value: _instagram.isNotEmpty ? _instagram : 'Not linked',
-                        ),
-                        _buildDetailTile(
-                          icon: isBrand ? Icons.language : Icons.play_circle_outline,
-                          title: isBrand ? 'Company Website' : 'YouTube / Channel',
-                          value: _youtube.isNotEmpty
-                              ? _youtube
-                              : (_website.isNotEmpty ? _website : 'Not linked'),
-                        ),
+                        if (!isBrand) ...[
+                          _buildDetailTile(
+                            icon: Icons.category_outlined,
+                            title: 'Primary Niche',
+                            value: _niche,
+                          ),
+                          _buildDetailTile(
+                            icon: Icons.camera_alt_outlined,
+                            title: 'Instagram',
+                            value: _instagram.isNotEmpty
+                                ? '$_instagram${_isVerified ? " (Verified ✓)" : ""}'
+                                : 'Not linked',
+                          ),
+                          _buildDetailTile(
+                            icon: Icons.play_circle_outline,
+                            title: 'YouTube / Channel',
+                            value: _youtube.isNotEmpty ? _youtube : 'Not linked',
+                          ),
+                        ] else ...[
+                          _buildDetailTile(
+                            icon: Icons.business,
+                            title: 'Brand / Company Name',
+                            value: _name,
+                          ),
+                          _buildDetailTile(
+                            icon: Icons.language,
+                            title: 'Company Website',
+                            value: _website.isNotEmpty ? _website : 'Not linked',
+                          ),
+                        ],
                         _buildDetailTile(
                           icon: Icons.location_on_outlined,
                           title: 'Location',
