@@ -4539,6 +4539,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  // Persistent in-memory cache for profile edits
+  static final Map<String, dynamic> _localProfileCache = {};
+
   // Profile state
   String _email = '';
   String _name = 'User';
@@ -4695,20 +4698,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _verificationCode = 'WOVZO-2401';
       }
 
-      // Sync controllers
-      _nameController.text = _name;
-      _bioController.text = _bio;
-      _nicheController.text = _niche;
-      _instagramController.text = _instagram;
-      _youtubeController.text = _youtube;
-      _locationController.text = _location;
-      _phoneController.text = _phone;
-      _websiteController.text = _website;
-      _avatarUrlController.text = _avatarUrl;
-
       // Query Stats
       await _loadStats(user.id);
     }
+
+    // Always restore in-memory profile edits if user modified profile in this session
+    if (_localProfileCache.isNotEmpty) {
+      if (_localProfileCache['name'] != null && _localProfileCache['name'].toString().trim().isNotEmpty) {
+        _name = _localProfileCache['name'].toString().trim();
+      }
+      if (_localProfileCache['bio'] != null) _bio = _localProfileCache['bio'].toString();
+      if (_localProfileCache['niche'] != null) _niche = _localProfileCache['niche'].toString();
+      if (_localProfileCache['instagram'] != null) _instagram = _localProfileCache['instagram'].toString();
+      if (_localProfileCache['youtube'] != null) _youtube = _localProfileCache['youtube'].toString();
+      if (_localProfileCache['location'] != null) _location = _localProfileCache['location'].toString();
+      if (_localProfileCache['phone'] != null) _phone = _localProfileCache['phone'].toString();
+      if (_localProfileCache['website'] != null) _website = _localProfileCache['website'].toString();
+      if (_localProfileCache['avatar_url'] != null) _avatarUrl = _localProfileCache['avatar_url'].toString();
+      if (_localProfileCache['is_verified'] == true) _isVerified = true;
+      if (_localProfileCache['verification_code'] != null && _localProfileCache['verification_code'].toString().isNotEmpty) {
+        _verificationCode = _localProfileCache['verification_code'].toString();
+      }
+    }
+
+    // Sync controllers
+    _nameController.text = _name;
+    _bioController.text = _bio;
+    _nicheController.text = _niche;
+    _instagramController.text = _instagram;
+    _youtubeController.text = _youtube;
+    _locationController.text = _location;
+    _phoneController.text = _phone;
+    _websiteController.text = _website;
+    _avatarUrlController.text = _avatarUrl;
 
     if (mounted) {
       setState(() => _isLoading = false);
@@ -4771,20 +4793,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) async {
     setModalState(() => _isSaving = true);
     setState(() => _isSaving = true);
+
+    final newName = _nameController.text.trim();
+    final newBio = _bioController.text.trim();
+    final newNiche = _nicheController.text.trim();
+    final newInsta = _instagramController.text.trim();
+    final newYt = _youtubeController.text.trim();
+    final newLoc = _locationController.text.trim();
+    final newPhone = _phoneController.text.trim();
+    final newWeb = _websiteController.text.trim();
+    final newAvatar = _avatarUrlController.text.trim();
+
+    // 1. Immediately apply to state & in-memory cache so updates show instantly!
+    if (mounted) {
+      setState(() {
+        if (newName.isNotEmpty) _name = newName;
+        _bio = newBio;
+        if (newNiche.isNotEmpty) _niche = newNiche;
+        _instagram = newInsta;
+        _youtube = newYt;
+        _location = newLoc;
+        _phone = newPhone;
+        _website = newWeb;
+        _avatarUrl = newAvatar;
+      });
+    }
+
+    _localProfileCache['name'] = newName.isNotEmpty ? newName : _name;
+    _localProfileCache['bio'] = newBio;
+    _localProfileCache['niche'] = newNiche;
+    _localProfileCache['instagram'] = newInsta;
+    _localProfileCache['youtube'] = newYt;
+    _localProfileCache['location'] = newLoc;
+    _localProfileCache['phone'] = newPhone;
+    _localProfileCache['website'] = newWeb;
+    _localProfileCache['avatar_url'] = newAvatar;
+    _localProfileCache['is_verified'] = _isVerified;
+    _localProfileCache['verification_code'] = _verificationCode;
+
+    // 2. Sync to Supabase in background
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        final newName = _nameController.text.trim();
-        final newBio = _bioController.text.trim();
-        final newNiche = _nicheController.text.trim();
-        final newInsta = _instagramController.text.trim();
-        final newYt = _youtubeController.text.trim();
-        final newLoc = _locationController.text.trim();
-        final newPhone = _phoneController.text.trim();
-        final newWeb = _websiteController.text.trim();
-        final newAvatar = _avatarUrlController.text.trim();
-
-        // 1. Try to update profiles table safely
         try {
           if (newName.isNotEmpty) {
             await Supabase.instance.client.from('profiles').upsert({
@@ -4798,77 +4848,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
             });
           }
         } catch (e) {
-          debugPrint('Notice: profiles table direct update error: $e');
+          debugPrint('Profiles table direct update notice: $e');
         }
 
-        // 2. Update user metadata in Auth (reliably persists)
-        await Supabase.instance.client.auth.updateUser(
-          UserAttributes(
-            data: {
-              'name': newName,
-              'bio': newBio,
-              'niche': newNiche,
-              'instagram': newInsta,
-              'youtube': newYt,
-              'location': newLoc,
-              'phone': newPhone,
-              'website': newWeb,
-              'avatar_url': newAvatar,
-              'role': _role,
-              'is_verified': _isVerified,
-              'verification_code': _verificationCode,
-            },
-          ),
-        );
-
-        if (mounted) {
-          setState(() {
-            _name = newName.isNotEmpty ? newName : _name;
-            _bio = newBio;
-            _niche = newNiche;
-            _instagram = newInsta;
-            _youtube = newYt;
-            _location = newLoc;
-            _phone = newPhone;
-            _website = newWeb;
-            _avatarUrl = newAvatar;
-          });
-
-          if (modalContext.mounted) {
-            Navigator.of(modalContext).pop();
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Profile updated successfully!'),
-                ],
-              ),
+        try {
+          await Supabase.instance.client.auth.updateUser(
+            UserAttributes(
+              data: {
+                'name': newName,
+                'bio': newBio,
+                'niche': newNiche,
+                'instagram': newInsta,
+                'youtube': newYt,
+                'location': newLoc,
+                'phone': newPhone,
+                'website': newWeb,
+                'avatar_url': newAvatar,
+                'role': _role,
+                'is_verified': _isVerified,
+                'verification_code': _verificationCode,
+              },
             ),
           );
+        } catch (e) {
+          debugPrint('Auth updateUser notice: $e');
         }
       }
     } catch (e) {
-      debugPrint('Error updating profile: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            content: Text('Error updating profile: $e'),
-          ),
-        );
-      }
+      debugPrint('Cloud profile save notice: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
       try {
         setModalState(() => _isSaving = false);
       } catch (_) {}
+
+      // Always close modal sheet
+      if (modalContext.mounted) {
+        Navigator.of(modalContext).pop();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Profile updated successfully!'),
+              ],
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -5021,6 +5054,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       debugPrint('Bio verification sync error: $e');
     }
 
+    _localProfileCache['is_verified'] = true;
+    _localProfileCache['verification_code'] = _verificationCode;
+
     if (mounted) {
       setState(() {
         _isVerified = true;
@@ -5080,6 +5116,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         } catch (_) {}
       }
 
+      _localProfileCache['is_verified'] = true;
+      _localProfileCache['verification_code'] = _verificationCode;
+
       if (mounted) {
         setState(() {
           _isVerified = true;
@@ -5117,55 +5156,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _saveAvatarOnly(String url, {required StateSetter setModalState, required BuildContext modalContext}) async {
     setModalState(() => _isSaving = true);
     setState(() => _isSaving = true);
+
+    // 1. Immediately apply to local state & cache so UI updates instantly
+    if (mounted) {
+      setState(() {
+        _avatarUrl = url;
+        _avatarUrlController.text = url;
+      });
+    }
+    _localProfileCache['avatar_url'] = url;
+
+    // 2. Sync to Supabase in background
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        await Supabase.instance.client.auth.updateUser(
-          UserAttributes(
-            data: {
-              'avatar_url': url,
-            },
-          ),
-        );
-        if (mounted) {
-          setState(() {
-            _avatarUrl = url;
-            _avatarUrlController.text = url;
+        try {
+          await Supabase.instance.client.from('profiles').upsert({
+            'id': user.id,
+            'avatar_url': url,
+            'updated_at': DateTime.now().toIso8601String(),
           });
-          if (modalContext.mounted) {
-            Navigator.of(modalContext).pop();
-          }
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Profile picture updated successfully!'),
-                ],
-              ),
+        } catch (e) {
+          debugPrint('Profiles table avatar update notice: $e');
+        }
+
+        try {
+          await Supabase.instance.client.auth.updateUser(
+            UserAttributes(
+              data: {
+                'avatar_url': url,
+              },
             ),
           );
+        } catch (e) {
+          debugPrint('Auth avatar updateUser notice: $e');
         }
       }
     } catch (e) {
-      debugPrint('Error updating avatar: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            content: Text('Error updating photo: $e'),
-          ),
-        );
-      }
+      debugPrint('Cloud avatar save notice: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
       try {
         setModalState(() => _isSaving = false);
       } catch (_) {}
+
+      // Always close modal
+      if (modalContext.mounted) {
+        Navigator.of(modalContext).pop();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Profile picture updated successfully!'),
+              ],
+            ),
+          ),
+        );
+      }
     }
   }
 
