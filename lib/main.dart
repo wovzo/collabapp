@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,6 +21,202 @@ ImageProvider? _getAvatarImageProvider(String url) {
     }
   }
   return NetworkImage(url);
+}
+
+class ImageCropDialog extends StatefulWidget {
+  final Uint8List imageBytes;
+  const ImageCropDialog({super.key, required this.imageBytes});
+
+  @override
+  State<ImageCropDialog> createState() => _ImageCropDialogState();
+}
+
+class _ImageCropDialogState extends State<ImageCropDialog> {
+  final GlobalKey _cropAreaKey = GlobalKey();
+  final TransformationController _transformController = TransformationController();
+  int _quarterTurns = 0;
+  bool _isCropping = false;
+
+  Future<void> _onCropAndDone() async {
+    setState(() => _isCropping = true);
+    try {
+      final boundary = _cropAreaKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        if (mounted) Navigator.of(context).pop(null);
+        return;
+      }
+      final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        final croppedBytes = byteData.buffer.asUint8List();
+        final base64String = 'data:image/png;base64,${base64Encode(croppedBytes)}';
+        if (mounted) Navigator.of(context).pop(base64String);
+        return;
+      }
+    } catch (e) {
+      debugPrint('Error cropping image: $e');
+    } finally {
+      if (mounted) setState(() => _isCropping = false);
+    }
+    if (mounted) Navigator.of(context).pop(null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF18181B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.crop, color: WovzoColors.orange, size: 22),
+                    SizedBox(width: 8),
+                    Text(
+                      'Crop Profile Picture',
+                      style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: () => Navigator.of(context).pop(null),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Pinch to zoom and drag to adjust photo inside circle',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                width: 250,
+                height: 250,
+                color: Colors.black,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    RepaintBoundary(
+                      key: _cropAreaKey,
+                      child: Container(
+                        width: 250,
+                        height: 250,
+                        color: Colors.black,
+                        child: RotatedBox(
+                          quarterTurns: _quarterTurns,
+                          child: InteractiveViewer(
+                            transformationController: _transformController,
+                            minScale: 0.8,
+                            maxScale: 4.0,
+                            boundaryMargin: const EdgeInsets.all(120),
+                            child: Image.memory(
+                              widget.imageBytes,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    IgnorePointer(
+                      child: Container(
+                        width: 230,
+                        height: 230,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.85), width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.55),
+                              blurRadius: 0,
+                              spreadRadius: 200,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.rotate_right, color: Colors.white70),
+                  tooltip: 'Rotate 90°',
+                  onPressed: () {
+                    setState(() {
+                      _quarterTurns = (_quarterTurns + 1) % 4;
+                    });
+                  },
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.restart_alt, size: 16, color: Colors.white60),
+                  label: const Text('Reset', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  onPressed: () {
+                    _transformController.value = Matrix4.identity();
+                    setState(() {
+                      _quarterTurns = 0;
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(null),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isCropping ? null : _onCropAndDone,
+                    icon: _isCropping
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check, size: 18),
+                    label: Text(_isCropping ? 'Cropping...' : 'Crop & Save'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: WovzoColors.orange,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> main() async {
@@ -160,6 +358,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLogin = true;
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String _selectedRole = 'influencer';
   String? _errorMessage;
 
@@ -535,10 +734,21 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _passwordController,
-                obscureText: true,
+                obscureText: _obscurePassword,
                 decoration: InputDecoration(
                   labelText: 'Password',
                   prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -5323,17 +5533,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         final picker = ImagePicker();
                                         final XFile? image = await picker.pickImage(
                                           source: ImageSource.gallery,
-                                          maxWidth: 400,
-                                          maxHeight: 400,
-                                          imageQuality: 70,
+                                          maxWidth: 800,
+                                          maxHeight: 800,
+                                          imageQuality: 85,
                                         );
-                                        if (image != null) {
+                                        if (image != null && modalCtx.mounted) {
                                           final bytes = await image.readAsBytes();
-                                          final base64Str = base64Encode(bytes);
-                                          setModalState(() {
-                                            tempAvatarUrl = 'data:image/jpeg;base64,$base64Str';
-                                            tempController.text = '';
-                                          });
+                                          final cropped = await showDialog<String>(
+                                            context: modalCtx,
+                                            builder: (ctx) => ImageCropDialog(imageBytes: bytes),
+                                          );
+                                          if (cropped != null) {
+                                            setModalState(() {
+                                              tempAvatarUrl = cropped;
+                                              tempController.text = '';
+                                            });
+                                          }
                                         }
                                       } catch (e) {
                                         debugPrint('Gallery pick error: $e');
@@ -5371,17 +5586,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       final picker = ImagePicker();
                                       final XFile? image = await picker.pickImage(
                                         source: ImageSource.camera,
-                                        maxWidth: 400,
-                                        maxHeight: 400,
-                                        imageQuality: 70,
+                                        maxWidth: 800,
+                                        maxHeight: 800,
+                                        imageQuality: 85,
                                       );
-                                      if (image != null) {
+                                      if (image != null && modalCtx.mounted) {
                                         final bytes = await image.readAsBytes();
-                                        final base64Str = base64Encode(bytes);
-                                        setModalState(() {
-                                          tempAvatarUrl = 'data:image/jpeg;base64,$base64Str';
-                                          tempController.text = '';
-                                        });
+                                        final cropped = await showDialog<String>(
+                                          context: modalCtx,
+                                          builder: (ctx) => ImageCropDialog(imageBytes: bytes),
+                                        );
+                                        if (cropped != null) {
+                                          setModalState(() {
+                                            tempAvatarUrl = cropped;
+                                            tempController.text = '';
+                                          });
+                                        }
                                       }
                                     } catch (e) {
                                       debugPrint('Camera error: $e');
@@ -5644,16 +5864,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     final picker = ImagePicker();
                                     final XFile? image = await picker.pickImage(
                                       source: ImageSource.gallery,
-                                      maxWidth: 400,
-                                      maxHeight: 400,
-                                      imageQuality: 70,
+                                      maxWidth: 800,
+                                      maxHeight: 800,
+                                      imageQuality: 85,
                                     );
-                                    if (image != null) {
+                                    if (image != null && context.mounted) {
                                       final bytes = await image.readAsBytes();
-                                      final base64Str = base64Encode(bytes);
-                                      setModalState(() {
-                                        _avatarUrlController.text = 'data:image/jpeg;base64,$base64Str';
-                                      });
+                                      final cropped = await showDialog<String>(
+                                        context: context,
+                                        builder: (ctx) => ImageCropDialog(imageBytes: bytes),
+                                      );
+                                      if (cropped != null) {
+                                        setModalState(() {
+                                          _avatarUrlController.text = cropped;
+                                        });
+                                      }
                                     }
                                   } catch (e) {
                                     debugPrint('Gallery pick error: $e');
@@ -5809,6 +6034,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _newPasswordController.clear();
     _confirmPasswordController.clear();
 
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
     showDialog(
       context: context,
       builder: (ctx) {
@@ -5828,21 +6056,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   TextField(
                     controller: _newPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
+                    obscureText: obscureNew,
+                    decoration: InputDecoration(
                       labelText: 'New Password (min 6 chars)',
-                      prefixIcon: Icon(Icons.lock_outline),
-                      border: OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureNew ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () {
+                          setDialogState(() => obscureNew = !obscureNew);
+                        },
+                      ),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _confirmPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
+                    obscureText: obscureConfirm,
+                    decoration: InputDecoration(
                       labelText: 'Confirm Password',
-                      prefixIcon: Icon(Icons.lock_outline),
-                      border: OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () {
+                          setDialogState(() => obscureConfirm = !obscureConfirm);
+                        },
+                      ),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                 ],
@@ -7045,6 +7291,7 @@ class UpdatePasswordScreen extends StatefulWidget {
 class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
 
   Future<void> _updatePassword() async {
@@ -7092,10 +7339,22 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
+              obscureText: _obscurePassword,
+              decoration: InputDecoration(
                 labelText: 'New Password',
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 24),
