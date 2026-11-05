@@ -6154,6 +6154,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  int _versionTapCounter = 0;
+
+  void _promptAdminPasscode(BuildContext context) {
+    final passCtrl = TextEditingController();
+    String? errorText;
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.admin_panel_settings, color: WovzoColors.orange, size: 22),
+              SizedBox(width: 8),
+              Text('Admin Console', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Enter Master Admin passcode:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passCtrl,
+                obscureText: true,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Passcode',
+                  errorText: errorText,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixIcon: const Icon(Icons.lock_outline),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dlgCtx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: WovzoColors.orange,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                final code = passCtrl.text.trim();
+                if (code == 'wovzo2026' || code == 'admin') {
+                  Navigator.pop(dlgCtx);
+                  _openAdminConsoleSheet(context);
+                } else {
+                  setDlgState(() {
+                    errorText = 'Incorrect passcode';
+                  });
+                }
+              },
+              child: const Text('Unlock', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openAdminConsoleSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -6769,6 +6835,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           title: const Text('App Version', style: TextStyle(fontWeight: FontWeight.w600)),
                           trailing: const Text('v1.0.0', style: TextStyle(color: Colors.grey)),
+                          onTap: () {
+                            _versionTapCounter++;
+                            if (_versionTapCounter >= 5) {
+                              _versionTapCounter = 0;
+                              _promptAdminPasscode(context);
+                            }
+                          },
                         ),
                       ],
                     ),
@@ -6776,36 +6849,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
 
                 const SizedBox(height: 24),
-
-                // MASTER ADMIN CONSOLE BUTTON
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _openAdminConsoleSheet(context),
-                      icon: const Icon(Icons.admin_panel_settings_outlined, color: WovzoColors.deepBlack),
-                      label: const Text(
-                        'Master Admin Console',
-                        style: TextStyle(
-                          color: WovzoColors.deepBlack,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        backgroundColor: Colors.grey.shade50,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
 
                 // 5. LOGOUT BUTTON
                 Padding(
