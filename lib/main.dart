@@ -602,8 +602,139 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Widget _buildGoogleIcon() {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: const Center(
+        child: Text(
+          'G',
+          style: TextStyle(
+            color: Color(0xFF4285F4),
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
 
+  void _completeGoogleSignIn(String email, String name, String normRole) {
+    _registeredAccountRoles[email] = normRole;
+    if (mounted) {
+      if (normRole == 'brand') {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
+      } else {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InfluencerMainScreen()));
+      }
+    }
+  }
 
+  void _promptCustomGoogleEmail(String normRole) {
+    final emailCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Google Sign In', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your Google email address to continue:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'user@gmail.com',
+                prefixIcon: Icon(Icons.email_outlined),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dlgCtx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: WovzoColors.orange),
+            onPressed: () {
+              final em = emailCtrl.text.trim().toLowerCase();
+              if (em.isNotEmpty) {
+                Navigator.pop(dlgCtx);
+                _completeGoogleSignIn(em, em.split('@')[0], normRole);
+              }
+            },
+            child: const Text('Sign In', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _signInWithGoogle() {
+    final normSelected = (_selectedRole.toLowerCase() == 'creator' || _selectedRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
+    final targetName = normSelected == 'brand' ? 'Brand' : 'Creator';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _buildGoogleIcon(),
+                const SizedBox(width: 10),
+                const Text('Sign in with Google', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text('Continue to Wovzo Collab as $targetName', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const CircleAvatar(
+                backgroundColor: WovzoColors.orange,
+                child: Text('AG', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+              title: const Text('Asraf Giimi', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('asrafgiimi@gmail.com'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+              onTap: () {
+                Navigator.pop(ctx);
+                _completeGoogleSignIn('asrafgiimi@gmail.com', 'Asraf Giimi', normSelected);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: Icon(Icons.person_add_alt_1, color: Colors.white, size: 18),
+              ),
+              title: const Text('Use another Google account', style: TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _promptCustomGoogleEmail(normSelected);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -839,42 +970,42 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text('OR', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                ],
+              ),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    final cleanEmail = _emailController.text.trim().toLowerCase();
-                    final normSelected = (_selectedRole.toLowerCase() == 'creator' || _selectedRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
-                    if (cleanEmail.isNotEmpty && _registeredAccountRoles.containsKey(cleanEmail)) {
-                      final regRole = _registeredAccountRoles[cleanEmail]!;
-                      final normReg = (regRole.toLowerCase() == 'creator' || regRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
-                      if (normReg != normSelected) {
-                        final targetName = normReg == 'influencer' ? 'Creator' : 'Brand';
-                        final currentName = normSelected == 'influencer' ? 'Creator' : 'Brand';
-                        setState(() {
-                          _errorMessage = 'Access Denied: This account is registered as a $targetName. You selected $currentName. Please switch to $targetName.';
-                        });
-                        return;
-                      }
-                    }
-
-                    if (normSelected == 'brand') {
-                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
-                    } else {
-                      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InfluencerMainScreen()));
-                    }
-                  },
-                  icon: const Icon(Icons.flash_on, color: WovzoColors.orange, size: 18),
-                  label: Text('Continue as ${_selectedRole == 'brand' ? 'Brand' : 'Creator'} (Demo Mode)', style: const TextStyle(fontWeight: FontWeight.bold, color: WovzoColors.deepBlack, fontSize: 13)),
+                child: OutlinedButton(
+                  onPressed: _signInWithGoogle,
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     side: const BorderSide(color: Color(0xFFCBD5E1)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: Colors.white,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildGoogleIcon(),
+                      const SizedBox(width: 10),
+                      const Text(
+                        'Continue with Google',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B), fontSize: 14),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
