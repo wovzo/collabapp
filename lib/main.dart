@@ -1102,9 +1102,13 @@ class ExploreScreen extends StatefulWidget {
   State<ExploreScreen> createState() => _ExploreScreenState();
 }
 
+// Globally track applied campaign IDs in memory across screens
+final Set<String> _globallyAppliedCampaignIds = {'exp-3'};
+
 class _ExploreScreenState extends State<ExploreScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'For You';
+  bool _hideApplied = false;
 
   static final List<Map<String, dynamic>> _demoExploreCampaigns = [
     {
@@ -1146,6 +1150,23 @@ class _ExploreScreenState extends State<ExploreScreen> {
   ];
 
   Future<List<Map<String, dynamic>>> _fetchExploreCampaigns() async {
+    // Sync applied campaigns from Supabase if logged in
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      try {
+        final apps = await Supabase.instance.client
+            .from('applications')
+            .select('campaign_id')
+            .eq('influencer_id', user.id)
+            .timeout(const Duration(seconds: 2));
+        for (final app in (apps as List)) {
+          if (app['campaign_id'] != null) {
+            _globallyAppliedCampaignIds.add(app['campaign_id'].toString());
+          }
+        }
+      } catch (_) {}
+    }
+
     try {
       final data = await Supabase.instance.client
           .from('campaigns')
@@ -1274,12 +1295,48 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
             const SizedBox(height: 24),
             
-            // Categories
+            // Categories & Hide Applied Filter
             SizedBox(
               height: 40,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: FilterChip(
+                      avatar: Icon(
+                        _hideApplied ? Icons.check_circle_rounded : Icons.visibility_off_outlined,
+                        size: 16,
+                        color: _hideApplied ? Colors.white : Colors.grey[700],
+                      ),
+                      label: Text(
+                        _globallyAppliedCampaignIds.isEmpty
+                            ? 'Hide Applied'
+                            : 'Hide Applied (${_globallyAppliedCampaignIds.length})',
+                        style: TextStyle(
+                          color: _hideApplied ? Colors.white : Colors.grey[800],
+                          fontWeight: _hideApplied ? FontWeight.bold : FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                      selected: _hideApplied,
+                      onSelected: (bool selected) {
+                        setState(() {
+                          _hideApplied = selected;
+                        });
+                      },
+                      selectedColor: WovzoColors.deepBlack,
+                      backgroundColor: Colors.grey[100],
+                      side: BorderSide(
+                        color: _hideApplied ? WovzoColors.deepBlack : Colors.grey[300]!,
+                        width: 1,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      showCheckmark: false,
+                    ),
+                  ),
                   _buildSelectableChip('For You'),
                   _buildSelectableChip('Fashion'),
                   _buildSelectableChip('Tech'),
@@ -1316,6 +1373,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 final allData = snapshot.data ?? _demoExploreCampaigns;
                 
                 final campaigns = allData.where((campaign) {
+                  final campId = campaign['id']?.toString() ?? '';
+                  // If hide applied is active, remove applied campaigns
+                  if (_hideApplied && _globallyAppliedCampaignIds.contains(campId)) {
+                    return false;
+                  }
+
                   // Filter by category
                   if (_selectedCategory != 'For You') {
                     final cat = _selectedCategory.toLowerCase();
@@ -1345,14 +1408,35 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 }).toList();
                 
                 if (campaigns.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(32.0),
+                  return Padding(
+                    padding: const EdgeInsets.all(32.0),
                     child: Center(
                       child: Column(
                         children: [
-                          Icon(Icons.search_off, size: 48, color: Colors.grey),
-                          SizedBox(height: 8),
-                          Text('No campaigns match your filter.', style: TextStyle(color: Colors.grey)),
+                          Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
+                          const SizedBox(height: 10),
+                          Text(
+                            _hideApplied && allData.isNotEmpty
+                                ? 'You have applied to all matching campaigns.'
+                                : 'No campaigns match your filter.',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                            textAlign: TextAlign.center,
+                          ),
+                          if (_hideApplied && allData.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _hideApplied = false;
+                                });
+                              },
+                              icon: const Icon(Icons.visibility_outlined, size: 16),
+                              label: const Text('Show All Campaigns'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: WovzoColors.orange,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1407,6 +1491,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   void _showApplyBottomSheet(BuildContext context, String campaignId, String campaignTitle, String brandName) {
+    if (_globallyAppliedCampaignIds.contains(campaignId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You have already applied to this campaign!')),
+      );
+      return;
+    }
+
     final pitchController = TextEditingController();
     showModalBottomSheet(
       context: context,
@@ -1465,28 +1556,37 @@ class _ExploreScreenState extends State<ExploreScreen> {
               child: ElevatedButton(
                 onPressed: () async {
                   final userId = Supabase.instance.client.auth.currentUser?.id;
-                  if (userId == null) return;
                   Navigator.pop(ctx);
-                  try {
-                    final pitchText = pitchController.text.trim();
-                    final payload = {
-                      'campaign_id': campaignId,
-                      'influencer_id': userId,
-                      'status': 'pending',
-                      if (pitchText.isNotEmpty) 'pitch': pitchText,
-                    };
-                    await Supabase.instance.client.from('applications').insert(payload);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Successfully applied to campaign!')),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You have already applied or an error occurred.')),
-                      );
-                    }
+
+                  _globallyAppliedCampaignIds.add(campaignId);
+                  if (mounted) setState(() {});
+
+                  if (userId != null) {
+                    try {
+                      final pitchText = pitchController.text.trim();
+                      final payload = {
+                        'campaign_id': campaignId,
+                        'influencer_id': userId,
+                        'status': 'pending',
+                        if (pitchText.isNotEmpty) 'pitch': pitchText,
+                      };
+                      await Supabase.instance.client.from('applications').insert(payload);
+                    } catch (e) {}
+                  }
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Row(
+                          children: [
+                            Icon(Icons.check_circle, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Text('Successfully applied to campaign!'),
+                          ],
+                        ),
+                        backgroundColor: Color(0xFF059669),
+                      ),
+                    );
                   }
                 },
                 style: ElevatedButton.styleFrom(
@@ -1513,12 +1613,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
     required Color color,
     String? campaignId,
   }) {
+    final hasApplied = campaignId != null && _globallyAppliedCampaignIds.contains(campaignId);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(
+          color: hasApplied ? const Color(0xFFA7F3D0) : Colors.grey[200]!,
+          width: hasApplied ? 1.5 : 1.0,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -1572,20 +1677,51 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  budget,
-                  style: TextStyle(
-                    color: Colors.green[700],
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      budget,
+                      style: TextStyle(
+                        color: Colors.green[700],
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                ),
+                  if (hasApplied) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.check_circle_rounded, size: 11, color: Color(0xFF059669)),
+                          SizedBox(width: 3),
+                          Text(
+                            'Applied',
+                            style: TextStyle(
+                              color: Color(0xFF065F46),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -1611,8 +1747,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.push(
+                  onPressed: () async {
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => CampaignDetailsScreen(
@@ -1625,6 +1761,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         ),
                       ),
                     );
+                    if (mounted) setState(() {});
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: WovzoColors.deepBlack,
@@ -1638,20 +1775,36 @@ class _ExploreScreenState extends State<ExploreScreen> {
               const SizedBox(width: 10),
               Expanded(
                 flex: 2,
-                child: ElevatedButton(
-                  onPressed: () {
-                    if (campaignId != null) {
-                      _showApplyBottomSheet(context, campaignId, campaignTitle, brandName);
-                    }
-                  },
+                child: ElevatedButton.icon(
+                  onPressed: hasApplied
+                      ? null
+                      : () {
+                          if (campaignId != null) {
+                            _showApplyBottomSheet(context, campaignId, campaignTitle, brandName);
+                          }
+                        },
+                  icon: Icon(
+                    hasApplied ? Icons.check_circle_rounded : Icons.send_rounded,
+                    size: 15,
+                  ),
+                  label: Text(
+                    hasApplied ? 'Already Applied' : 'Apply with Pitch',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: WovzoColors.orange,
-                    foregroundColor: Colors.white,
+                    backgroundColor: hasApplied ? const Color(0xFFECFDF5) : WovzoColors.orange,
+                    foregroundColor: hasApplied ? const Color(0xFF047857) : Colors.white,
+                    disabledBackgroundColor: const Color(0xFFECFDF5),
+                    disabledForegroundColor: const Color(0xFF047857),
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: hasApplied
+                          ? const BorderSide(color: Color(0xFFA7F3D0))
+                          : BorderSide.none,
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text('Apply with Pitch', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -1662,7 +1815,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 }
 
-class CampaignDetailsScreen extends StatelessWidget {
+class CampaignDetailsScreen extends StatefulWidget {
   final String brandName;
   final String campaignTitle;
   final String budget;
@@ -1680,8 +1833,20 @@ class CampaignDetailsScreen extends StatelessWidget {
     this.campaignId,
   });
 
+  @override
+  State<CampaignDetailsScreen> createState() => _CampaignDetailsScreenState();
+}
+
+class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
   void _showApplyDialog(BuildContext context) {
-    if (campaignId == null) return;
+    if (widget.campaignId == null) return;
+    if (_globallyAppliedCampaignIds.contains(widget.campaignId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You have already applied to this campaign!')),
+      );
+      return;
+    }
+
     final pitchController = TextEditingController();
 
     showModalBottomSheet(
@@ -1707,7 +1872,7 @@ class CampaignDetailsScreen extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Apply for $campaignTitle',
+                    'Apply for ${widget.campaignTitle}',
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
                   ),
                 ),
@@ -1717,7 +1882,7 @@ class CampaignDetailsScreen extends StatelessWidget {
                 ),
               ],
             ),
-            Text('Brand: $brandName • Payout: $budget', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            Text('Brand: ${widget.brandName} • Payout: ${widget.budget}', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
             const SizedBox(height: 16),
             const Text(
               'Your Proposal / Pitch (Optional)',
@@ -1741,28 +1906,39 @@ class CampaignDetailsScreen extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () async {
                   final userId = Supabase.instance.client.auth.currentUser?.id;
-                  if (userId == null) return;
                   Navigator.pop(ctx);
-                  try {
-                    final pitchText = pitchController.text.trim();
-                    final payload = {
-                      'campaign_id': campaignId,
-                      'influencer_id': userId,
-                      'status': 'pending',
-                      if (pitchText.isNotEmpty) 'pitch': pitchText,
-                    };
-                    await Supabase.instance.client.from('applications').insert(payload);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Successfully applied to campaign!')),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You have already applied or an error occurred.')),
-                      );
-                    }
+
+                  if (widget.campaignId != null) {
+                    _globallyAppliedCampaignIds.add(widget.campaignId!);
+                    setState(() {});
+                  }
+
+                  if (userId != null && widget.campaignId != null) {
+                    try {
+                      final pitchText = pitchController.text.trim();
+                      final payload = {
+                        'campaign_id': widget.campaignId,
+                        'influencer_id': userId,
+                        'status': 'pending',
+                        if (pitchText.isNotEmpty) 'pitch': pitchText,
+                      };
+                      await Supabase.instance.client.from('applications').insert(payload);
+                    } catch (e) {}
+                  }
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Row(
+                          children: [
+                            Icon(Icons.check_circle, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Text('Successfully applied to campaign!'),
+                          ],
+                        ),
+                        backgroundColor: Color(0xFF059669),
+                      ),
+                    );
                   }
                 },
                 style: ElevatedButton.styleFrom(
@@ -1783,6 +1959,8 @@ class CampaignDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasApplied = widget.campaignId != null && _globallyAppliedCampaignIds.contains(widget.campaignId);
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -1795,6 +1973,46 @@ class CampaignDetailsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (hasApplied) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Already Applied',
+                            style: TextStyle(
+                              color: Color(0xFF065F46),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Your pitch is submitted and under review by the brand.',
+                            style: TextStyle(
+                              color: Color(0xFF047857),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             Center(
               child: Container(
                 width: 80,
@@ -1806,7 +2024,7 @@ class CampaignDetailsScreen extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(
-                    brandName.isNotEmpty ? brandName[0].toUpperCase() : "B",
+                    widget.brandName.isNotEmpty ? widget.brandName[0].toUpperCase() : "B",
                     style: const TextStyle(
                       color: WovzoColors.orange,
                       fontWeight: FontWeight.bold,
@@ -1819,7 +2037,7 @@ class CampaignDetailsScreen extends StatelessWidget {
             const SizedBox(height: 16),
             Center(
               child: Text(
-                brandName,
+                widget.brandName,
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey[600],
@@ -1830,7 +2048,7 @@ class CampaignDetailsScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Center(
               child: Text(
-                campaignTitle,
+                widget.campaignTitle,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 24,
@@ -1843,7 +2061,7 @@ class CampaignDetailsScreen extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: _buildInfoCard('Budget', budget, Icons.account_balance_wallet_outlined, Colors.green),
+                  child: _buildInfoCard('Budget', widget.budget, Icons.account_balance_wallet_outlined, Colors.green),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1867,8 +2085,8 @@ class CampaignDetailsScreen extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
             ),
             const SizedBox(height: 12),
-            _buildRequirementItem('Minimum Followers', requirements.split('•')[0].trim()),
-            _buildRequirementItem('Deliverables', requirements.split('•').length > 1 ? requirements.split('•')[1].trim() : 'Content creation'),
+            _buildRequirementItem('Minimum Followers', widget.requirements.split('•')[0].trim()),
+            _buildRequirementItem('Deliverables', widget.requirements.split('•').length > 1 ? widget.requirements.split('•')[1].trim() : 'Content creation'),
             _buildRequirementItem('Usage Rights', '6 months digital ads'),
           ],
         ),
@@ -1876,19 +2094,28 @@ class CampaignDetailsScreen extends StatelessWidget {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              onPressed: () => _showApplyDialog(context),
-              style: ElevatedButton.styleFrom(
-              backgroundColor: WovzoColors.orange,
-              foregroundColor: Colors.white,
+          child: ElevatedButton.icon(
+            onPressed: hasApplied ? null : () => _showApplyDialog(context),
+            icon: Icon(
+              hasApplied ? Icons.check_circle_rounded : Icons.send_rounded,
+              size: 18,
+            ),
+            label: Text(
+              hasApplied ? 'Already Applied' : 'Apply Now',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: hasApplied ? const Color(0xFFECFDF5) : WovzoColors.orange,
+              foregroundColor: hasApplied ? const Color(0xFF047857) : Colors.white,
+              disabledBackgroundColor: const Color(0xFFECFDF5),
+              disabledForegroundColor: const Color(0xFF047857),
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
+                side: hasApplied
+                    ? const BorderSide(color: Color(0xFFA7F3D0), width: 1.5)
+                    : BorderSide.none,
               ),
-            ),
-            child: const Text(
-              'Apply Now',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
         ),
