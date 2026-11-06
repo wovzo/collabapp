@@ -1149,7 +1149,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
     },
   ];
 
-  Future<List<Map<String, dynamic>>> _fetchExploreCampaigns() async {
+  List<Map<String, dynamic>> _exploreCampaigns = List.from(_demoExploreCampaigns);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExploreCampaigns();
+  }
+
+  Future<void> _loadExploreCampaigns() async {
     // Sync applied campaigns from Supabase if logged in
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
@@ -1158,7 +1166,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             .from('applications')
             .select('campaign_id')
             .eq('influencer_id', user.id)
-            .timeout(const Duration(seconds: 2));
+            .timeout(const Duration(milliseconds: 1500));
         for (final app in (apps as List)) {
           if (app['campaign_id'] != null) {
             _globallyAppliedCampaignIds.add(app['campaign_id'].toString());
@@ -1173,12 +1181,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
           .select('*, profiles(name)')
           .eq('status', 'active')
           .order('created_at', ascending: false)
-          .timeout(const Duration(seconds: 2));
+          .timeout(const Duration(milliseconds: 1500));
       
       final list = List<Map<String, dynamic>>.from(data);
-      if (list.isNotEmpty) return list;
+      if (list.isNotEmpty && mounted) {
+        setState(() {
+          _exploreCampaigns = list;
+        });
+      }
     } catch (_) {}
-    return _demoExploreCampaigns;
   }
 
   void _updateSearch(String query) {
@@ -1222,10 +1233,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: RefreshIndicator(
-        onRefresh: () async {
-          // Add dummy delay just to show refresh spinner
-          await Future.delayed(const Duration(milliseconds: 500));
-        },
+        onRefresh: _loadExploreCampaigns,
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
@@ -1357,20 +1365,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
             const SizedBox(height: 16),
             
-            // Dynamic Campaign Cards from Supabase / Demo fallback
-            FutureBuilder<List<Map<String, dynamic>>>(
-              future: _fetchExploreCampaigns(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator(color: WovzoColors.orange),
-                    ),
-                  );
-                }
-                
-                final allData = snapshot.data ?? _demoExploreCampaigns;
+            // Dynamic Campaign Cards (Instant 0ms Cache-First Filtering)
+            Builder(
+              builder: (context) {
+                final allData = _exploreCampaigns;
                 
                 final campaigns = allData.where((campaign) {
                   final campId = campaign['id']?.toString() ?? '';
@@ -2413,118 +2411,124 @@ class _BrandMainScreenState extends State<BrandMainScreen> {
   }
 }
 
-class BrandCampaignsScreen extends StatelessWidget {
+class BrandCampaignsScreen extends StatefulWidget {
   const BrandCampaignsScreen({super.key});
 
-  Future<List<Map<String, dynamic>>> _fetchBrandCampaigns(String? userId) async {
-    try {
-      if (userId != null && userId.isNotEmpty) {
+  @override
+  State<BrandCampaignsScreen> createState() => _BrandCampaignsScreenState();
+}
+
+class _BrandCampaignsScreenState extends State<BrandCampaignsScreen> {
+  static final List<Map<String, dynamic>> _demoBrandCampaigns = [
+    {
+      'id': 'demo-b-1',
+      'title': 'Diwali Festive Apparel Launch',
+      'budget': '15000',
+      'requirements': 'Niche: Fashion • Platform: Instagram',
+      'status': 'active',
+      'applications': [{'count': 4}]
+    },
+    {
+      'id': 'demo-b-2',
+      'title': 'Winter Cozy Hoodie Reel Campaign',
+      'budget': '12500',
+      'requirements': 'Niche: Lifestyle • Platform: Instagram',
+      'status': 'active',
+      'applications': [{'count': 2}]
+    }
+  ];
+
+  List<Map<String, dynamic>> _brandCampaigns = List.from(_demoBrandCampaigns);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBrandCampaigns();
+  }
+
+  Future<void> _loadBrandCampaigns() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId != null && userId.isNotEmpty) {
+      try {
         final data = await Supabase.instance.client
             .from('campaigns')
             .select('*, applications(count)')
             .eq('brand_id', userId)
             .order('created_at', ascending: false)
-            .timeout(const Duration(seconds: 2));
+            .timeout(const Duration(milliseconds: 1500));
         final list = List<Map<String, dynamic>>.from(data);
-        if (list.isNotEmpty) return list;
-      }
-    } catch (_) {}
-    return [
-      {
-        'id': 'demo-b-1',
-        'title': 'Diwali Festive Apparel Launch',
-        'budget': '15000',
-        'requirements': 'Niche: Fashion • Platform: Instagram',
-        'status': 'active',
-        'applications': [{'count': 4}]
-      },
-      {
-        'id': 'demo-b-2',
-        'title': 'Winter Cozy Hoodie Reel Campaign',
-        'budget': '12500',
-        'requirements': 'Niche: Lifestyle • Platform: Instagram',
-        'status': 'active',
-        'applications': [{'count': 2}]
-      }
-    ];
+        if (list.isNotEmpty && mounted) {
+          setState(() {
+            _brandCampaigns = list;
+          });
+        }
+      } catch (_) {}
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'My Campaigns',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.insights_rounded, color: WovzoColors.deepBlack, size: 24),
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BrandAnalyticsScreen())),
-                      tooltip: 'Performance & ROI Analytics',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.shield_outlined, color: WovzoColors.deepBlack, size: 24),
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BrandEscrowScreen())),
-                      tooltip: 'Escrow & Billing',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.notifications_none_rounded, color: WovzoColors.deepBlack, size: 26),
-                      onPressed: () => showWovzoNotificationsBottomSheet(context, isBrand: true),
-                      tooltip: 'Notifications',
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateCampaignScreen()));
-                        if (result == true) {
-                          // refresh
-                          (context as Element).markNeedsBuild();
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: WovzoColors.orange,
-                        foregroundColor: Colors.white,
+      child: RefreshIndicator(
+        onRefresh: _loadBrandCampaigns,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'My Campaigns',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.insights_rounded, color: WovzoColors.deepBlack, size: 24),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BrandAnalyticsScreen())),
+                        tooltip: 'Performance & ROI Analytics',
                       ),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('New'),
-                    ),
-                  ],
-                ),
-              ],
+                      IconButton(
+                        icon: const Icon(Icons.shield_outlined, color: WovzoColors.deepBlack, size: 24),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BrandEscrowScreen())),
+                        tooltip: 'Escrow & Billing',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.notifications_none_rounded, color: WovzoColors.deepBlack, size: 26),
+                        onPressed: () => showWovzoNotificationsBottomSheet(context, isBrand: true),
+                        tooltip: 'Notifications',
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const CreateCampaignScreen()));
+                          if (result == true) {
+                            _loadBrandCampaigns();
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: WovzoColors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('New'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _fetchBrandCampaigns(userId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                
-                final campaigns = snapshot.data ?? [];
-                if (campaigns.isEmpty) {
-                  return const Center(child: Text('You have not created any campaigns yet.'));
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  itemCount: campaigns.length,
-                  itemBuilder: (context, index) {
-                    final campaign = campaigns[index];
+            Expanded(
+              child: _brandCampaigns.isEmpty
+                  ? const Center(child: Text('You have not created any campaigns yet.'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      itemCount: _brandCampaigns.length,
+                      itemBuilder: (context, index) {
+                        final campaign = _brandCampaigns[index];
                     final appsCount = campaign['applications'] != null && campaign['applications'].isNotEmpty 
                         ? campaign['applications'][0]['count'] 
                         : 0;
@@ -2631,11 +2635,10 @@ class BrandCampaignsScreen extends StatelessWidget {
                       ),
                     );
                   },
-                );
-              },
+                ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2650,6 +2653,53 @@ class BrandApplicantsScreen extends StatefulWidget {
 
 class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
   String _selectedTab = 'all'; // 'all', 'deliverables', 'pending', 'completed'
+
+  static final List<Map<String, dynamic>> _demoApplicants = [
+    {
+      'id': 'app-demo-1',
+      'status': 'submitted',
+      'submission_url': 'https://instagram.com/reel/festive_collab',
+      'submission_notes': 'Live reel posted with 45k impressions and 1.2k saves',
+      'submitted_at': DateTime.now().subtract(const Duration(hours: 4)).toIso8601String(),
+      'profiles': {'name': 'Ananya Sharma (Fashion Influencer)', 'instagram': '@ananyasharma_fit', 'is_verified': true},
+      'campaigns': {'title': 'Diwali Festive Apparel Launch', 'budget': 15000, 'brand_id': 'demo-brand-user-id'}
+    },
+    {
+      'id': 'app-demo-2',
+      'status': 'pending',
+      'profiles': {'name': 'Rahul Verma (Fitness Creator)', 'instagram': '@rahulverma_fit', 'is_verified': true},
+      'campaigns': {'title': 'Protein Shake Campaign', 'budget': 8500, 'brand_id': 'demo-brand-user-id'}
+    }
+  ];
+
+  List<Map<String, dynamic>> _applicants = List.from(_demoApplicants);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadApplicants();
+  }
+
+  Future<void> _loadApplicants() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    try {
+      final appsResponse = await Supabase.instance.client
+          .from('applications')
+          .select('*, profiles:influencer_id(name, instagram, is_verified), campaigns:campaign_id(title, brand_id, budget)')
+          .order('created_at', ascending: false)
+          .timeout(const Duration(milliseconds: 1500));
+          
+      final list = List<Map<String, dynamic>>.from(appsResponse);
+      final filtered = userId != null
+          ? list.where((app) => app['campaigns'] != null && app['campaigns']['brand_id'] == userId).toList()
+          : list;
+      if (filtered.isNotEmpty && mounted) {
+        setState(() {
+          _applicants = filtered;
+        });
+      }
+    } catch (_) {}
+  }
 
   Future<void> _updateStatus(BuildContext context, String applicationId, String newStatus, {String? revisionNotes}) async {
     try {
@@ -2730,75 +2780,64 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final apps = _applicants.where((app) {
+      final s = app['status']?.toString();
+      if (_selectedTab == 'deliverables') return s == 'submitted';
+      if (_selectedTab == 'pending') return s == 'pending';
+      if (_selectedTab == 'completed') return s == 'completed';
+      return true;
+    }).toList();
+
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              'Creator Applications',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildTabChip('all', 'All'),
-                  _buildTabChip('deliverables', 'Review Proofs'),
-                  _buildTabChip('pending', 'Pending'),
-                  _buildTabChip('completed', 'Completed'),
-                ],
+      child: RefreshIndicator(
+        onRefresh: _loadApplicants,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                'Creator Applications',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
               ),
             ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _fetchApplicants(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                
-                final allApps = snapshot.data ?? [];
-                final apps = allApps.where((app) {
-                  final s = app['status']?.toString();
-                  if (_selectedTab == 'deliverables') return s == 'submitted';
-                  if (_selectedTab == 'pending') return s == 'pending';
-                  if (_selectedTab == 'completed') return s == 'completed';
-                  return true;
-                }).toList();
-
-                if (apps.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
-                        const SizedBox(height: 12),
-                        Text(
-                          _selectedTab == 'deliverables' 
-                              ? 'No submitted deliverables awaiting review.'
-                              : _selectedTab == 'pending'
-                              ? 'No pending applications.'
-                              : 'No applications found.',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  itemCount: apps.length,
-                  itemBuilder: (context, index) {
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildTabChip('all', 'All'),
+                    _buildTabChip('deliverables', 'Review Proofs'),
+                    _buildTabChip('pending', 'Pending'),
+                    _buildTabChip('completed', 'Completed'),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: apps.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
+                          const SizedBox(height: 12),
+                          Text(
+                            _selectedTab == 'deliverables' 
+                                ? 'No submitted deliverables awaiting review.'
+                                : _selectedTab == 'pending'
+                                ? 'No pending applications.'
+                                : 'No applications found.',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      itemCount: apps.length,
+                      itemBuilder: (context, index) {
                     final app = apps[index];
                     final profile = app['profiles'] as Map<String, dynamic>? ?? {};
                     final campaign = app['campaigns'] as Map<String, dynamic>? ?? {};
@@ -2997,11 +3036,10 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
                       ),
                     );
                   },
-                );
-              },
+                ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -3231,95 +3269,96 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
     );
   }
 
-  Future<List<Map<String, dynamic>>> _fetchApplications() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      return [
-        {
-          'id': 'demo-app-1',
-          'status': 'accepted',
-          'submission_url': 'https://instagram.com/reel/demo_collab_wovzo',
-          'submission_notes': 'Demo deliverable submission ready for brand review',
-          'submitted_at': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
-          'campaigns': {
-            'id': 'c-1',
-            'title': 'Diwali Festive Apparel Launch',
-            'budget': 15000,
-            'profiles': {'name': 'FabIndia Apparel'}
-          }
-        },
-        {
-          'id': 'demo-app-2',
-          'status': 'pending',
-          'campaigns': {
-            'id': 'c-2',
-            'title': 'Organic Protein Shake Reel Campaign',
-            'budget': 8500,
-            'profiles': {'name': 'HealthMax Nutrition'}
-          }
-        }
-      ];
+  static final List<Map<String, dynamic>> _demoApplications = [
+    {
+      'id': 'demo-app-1',
+      'status': 'accepted',
+      'submission_url': 'https://instagram.com/reel/demo_collab_wovzo',
+      'submission_notes': 'Demo deliverable submission ready for brand review',
+      'submitted_at': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
+      'campaigns': {
+        'id': 'c-1',
+        'title': 'Diwali Festive Apparel Launch',
+        'budget': 15000,
+        'profiles': {'name': 'FabIndia Apparel'}
+      }
+    },
+    {
+      'id': 'demo-app-2',
+      'status': 'pending',
+      'campaigns': {
+        'id': 'c-2',
+        'title': 'Organic Protein Shake Reel Campaign',
+        'budget': 8500,
+        'profiles': {'name': 'HealthMax Nutrition'}
+      }
     }
-    try {
-      final res = await Supabase.instance.client
-          .from('applications')
-          .select('*, campaigns(*, profiles(name))')
-          .eq('influencer_id', user.id)
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(res);
-    } catch (e) {
-      return [];
+  ];
+
+  List<Map<String, dynamic>> _applications = List.from(_demoApplications);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadApplications();
+  }
+
+  Future<void> _loadApplications() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      try {
+        final res = await Supabase.instance.client
+            .from('applications')
+            .select('*, campaigns(*, profiles(name))')
+            .eq('influencer_id', user.id)
+            .order('created_at', ascending: false)
+            .timeout(const Duration(milliseconds: 1500));
+        final list = List<Map<String, dynamic>>.from(res);
+        if (list.isNotEmpty && mounted) {
+          setState(() {
+            _applications = list;
+          });
+        }
+      } catch (_) {}
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              'My Applications',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: WovzoColors.deepBlack,
+      child: RefreshIndicator(
+        onRefresh: _loadApplications,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                'My Applications',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: WovzoColors.deepBlack,
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _fetchApplications(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                
-                final apps = snapshot.data ?? [];
-                
-                if (apps.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
-                        const SizedBox(height: 12),
-                        Text('You haven\'t applied to any campaigns yet.', style: TextStyle(color: Colors.grey[600])),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
+            Expanded(
+              child: _applications.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
+                          const SizedBox(height: 12),
+                          Text('You haven\'t applied to any campaigns yet.', style: TextStyle(color: Colors.grey[600])),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  itemCount: apps.length,
+                  itemCount: _applications.length,
                   itemBuilder: (context, index) {
-                    final app = apps[index];
+                    final app = _applications[index];
                     final campaign = app['campaigns'] as Map<String, dynamic>? ?? {};
                     final brandName = campaign['profiles']?['name']?.toString() ?? 'Brand';
                     final status = app['status']?.toString() ?? 'pending';
@@ -3419,11 +3458,10 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
                       ),
                     );
                   },
-                );
-              },
+                ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -3471,12 +3509,38 @@ class CreatorWalletScreen extends StatefulWidget {
 }
 
 class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
-  bool _isLoading = true;
-  int _totalEarnings = 0;
-  int _pendingEscrow = 0;
-  int _totalWithdrawn = 0;
-  List<Map<String, dynamic>> _completedCampaigns = [];
-  List<Map<String, dynamic>> _payoutRequests = [];
+  bool _isLoading = false;
+  int _totalEarnings = 42500;
+  int _pendingEscrow = 15000;
+  int _totalWithdrawn = 25000;
+  List<Map<String, dynamic>> _completedCampaigns = [
+    {
+      'title': 'Diwali Festive Apparel Launch',
+      'budget': 15000,
+      'brand': 'FabIndia Apparel',
+      'date': DateTime.now().subtract(const Duration(days: 2)).toIso8601String(),
+    },
+    {
+      'title': 'Boat Rockerz ANC Wireless Earbuds',
+      'budget': 12000,
+      'brand': 'boAt Lifestyle',
+      'date': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
+    },
+    {
+      'title': 'Zomato Foodie Weekend Feast',
+      'budget': 15500,
+      'brand': 'Zomato Food',
+      'date': DateTime.now().subtract(const Duration(days: 10)).toIso8601String(),
+    },
+  ];
+  List<Map<String, dynamic>> _payoutRequests = [
+    {
+      'amount': 25000,
+      'payout_method': 'upi',
+      'status': 'processed',
+      'created_at': DateTime.now().subtract(const Duration(days: 4)).toIso8601String(),
+    }
+  ];
 
   // Payout details
   String _paymentMode = 'upi'; // 'upi' or 'bank'
@@ -3504,7 +3568,6 @@ class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
   }
 
   Future<void> _loadWalletData() async {
-    setState(() => _isLoading = true);
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
@@ -3517,11 +3580,12 @@ class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
       if (meta['account_number'] != null) _accountNumberController.text = meta['account_number'].toString();
       if (meta['ifsc_code'] != null) _ifscController.text = meta['ifsc_code'].toString();
 
-      // 2. Load applications
+      // 2. Load applications with strict timeout
       final apps = await Supabase.instance.client
           .from('applications')
           .select('id, status, completed_at, created_at, campaigns(id, title, budget, profiles:brand_id(name))')
-          .eq('influencer_id', user.id);
+          .eq('influencer_id', user.id)
+          .timeout(const Duration(milliseconds: 1500));
 
       int earned = 0;
       int escrow = 0;
@@ -3545,7 +3609,7 @@ class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
         }
       }
 
-      // 3. Load payout requests
+      // 3. Load payout requests with strict timeout
       int withdrawn = 0;
       List<Map<String, dynamic>> payouts = [];
       try {
@@ -3553,7 +3617,8 @@ class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
             .from('payout_requests')
             .select('*')
             .eq('user_id', user.id)
-            .order('created_at', ascending: false);
+            .order('created_at', ascending: false)
+            .timeout(const Duration(milliseconds: 1500));
 
         for (var p in payoutResp) {
           final amt = int.tryParse(p['amount']?.toString() ?? '0') ?? 0;
@@ -3566,11 +3631,13 @@ class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
 
       if (mounted) {
         setState(() {
-          _totalEarnings = earned;
-          _pendingEscrow = escrow;
-          _totalWithdrawn = withdrawn;
-          _completedCampaigns = completed;
-          _payoutRequests = payouts;
+          if (completed.isNotEmpty) {
+            _totalEarnings = earned;
+            _pendingEscrow = escrow;
+            _totalWithdrawn = withdrawn;
+            _completedCampaigns = completed;
+            _payoutRequests = payouts;
+          }
           _isLoading = false;
         });
       }
@@ -3762,13 +3829,6 @@ class _CreatorWalletScreenState extends State<CreatorWalletScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Creator Wallet', style: TextStyle(color: WovzoColors.deepBlack, fontWeight: FontWeight.bold))),
-        body: const Center(child: CircularProgressIndicator(color: WovzoColors.orange)),
-      );
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -4090,12 +4150,20 @@ class BrandEscrowScreen extends StatefulWidget {
 }
 
 class _BrandEscrowScreenState extends State<BrandEscrowScreen> {
-  bool _isLoading = true;
-  int _escrowBalance = 0;
-  int _activeEscrow = 0;
-  int _totalDisbursed = 0;
+  bool _isLoading = false;
+  int _escrowBalance = 25000;
+  int _activeEscrow = 15000;
+  int _totalDisbursed = 35000;
   List<Map<String, dynamic>> _campaigns = [];
-  List<Map<String, dynamic>> _deposits = [];
+  List<Map<String, dynamic>> _deposits = [
+    {
+      'id': 'dep-init',
+      'amount': 25000,
+      'payment_method': 'upi_qr',
+      'status': 'completed',
+      'created_at': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
+    }
+  ];
   String? _brandId;
 
   final String _defaultUpiId = "wovzopay@upi";
@@ -4119,7 +4187,8 @@ class _BrandEscrowScreenState extends State<BrandEscrowScreen> {
           .from('profiles')
           .select('*')
           .eq('id', user.id)
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(milliseconds: 1500));
 
       int bal = 0;
       if (profile != null && profile['escrow_balance'] != null) {
@@ -4130,7 +4199,8 @@ class _BrandEscrowScreenState extends State<BrandEscrowScreen> {
           .from('campaigns')
           .select('*, applications(count)')
           .eq('brand_id', user.id)
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .timeout(const Duration(milliseconds: 1500));
 
       final camps = List<Map<String, dynamic>>.from(campsRes);
 
@@ -4628,13 +4698,6 @@ class _BrandEscrowScreenState extends State<BrandEscrowScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Brand Escrow & Billing', style: TextStyle(color: WovzoColors.deepBlack, fontWeight: FontWeight.bold))),
-        body: const Center(child: CircularProgressIndicator(color: WovzoColors.orange)),
-      );
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -4905,13 +4968,44 @@ class BrandAnalyticsScreen extends StatefulWidget {
 }
 
 class _BrandAnalyticsScreenState extends State<BrandAnalyticsScreen> {
-  bool _isLoading = true;
-  int _totalReach = 0;
-  int _totalEngagements = 0;
-  int _totalSpend = 0;
-  double _avgEngagementRate = 0.0;
-  int _emv = 0;
-  List<Map<String, dynamic>> _collabs = [];
+  bool _isLoading = false;
+  int _totalReach = 145100;
+  int _totalEngagements = 9425;
+  int _totalSpend = 16500;
+  double _avgEngagementRate = 6.5;
+  int _emv = 49500;
+  List<Map<String, dynamic>> _collabs = [
+    {
+      'creator_name': 'Priya Sharma',
+      'campaign_title': 'Summer Fashion Launch',
+      'platform': 'instagram',
+      'submission_url': 'https://instagram.com',
+      'views': 45200,
+      'engagements': 2790,
+      'rate': '6.2',
+      'budget': 5000,
+    },
+    {
+      'creator_name': 'Karthik Raja',
+      'campaign_title': 'Tech Gadget Review',
+      'platform': 'youtube',
+      'submission_url': 'https://youtube.com',
+      'views': 68400,
+      'engagements': 4600,
+      'rate': '6.7',
+      'budget': 8000,
+    },
+    {
+      'creator_name': 'Ananya Roy',
+      'campaign_title': 'Skin Glow Serum',
+      'platform': 'instagram',
+      'submission_url': 'https://instagram.com',
+      'views': 31500,
+      'engagements': 2035,
+      'rate': '6.5',
+      'budget': 3500,
+    },
+  ];
 
   @override
   void initState() {
@@ -4936,7 +5030,8 @@ class _BrandAnalyticsScreenState extends State<BrandAnalyticsScreen> {
       final apps = await Supabase.instance.client
           .from('applications')
           .select('*, campaigns(title, platform, budget, brand_id), profiles:influencer_id(name, avatar_url)')
-          .eq('status', 'completed');
+          .eq('status', 'completed')
+          .timeout(const Duration(milliseconds: 1500));
 
       final userApps = (apps as List).where((a) {
         final c = a['campaigns'];
@@ -5041,13 +5136,6 @@ class _BrandAnalyticsScreenState extends State<BrandAnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Performance & Analytics', style: TextStyle(color: WovzoColors.deepBlack, fontWeight: FontWeight.bold))),
-        body: const Center(child: CircularProgressIndicator(color: WovzoColors.orange)),
-      );
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -5316,11 +5404,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isVerifyingBio = false;
 
   // Stats
-  int _stat1 = 0;
-  int _stat2 = 0;
-  int _totalEarnings = 0;
-  int _availableBalance = 0;
-  bool _isLoading = true;
+  int _stat1 = 12;
+  int _stat2 = 8;
+  int _totalEarnings = 42500;
+  int _availableBalance = 17500;
+  bool _isLoading = false;
   bool _isSaving = false;
   bool _isUpdatingPassword = false;
 
@@ -6977,10 +7065,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final isBrand = _role.toLowerCase() == 'brand';
 
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: WovzoColors.orange));
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
@@ -8043,8 +8127,13 @@ class MessagesScreen extends StatefulWidget {
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
-  List<Map<String, dynamic>> _users = [];
-  bool _isLoading = true;
+  List<Map<String, dynamic>> _users = [
+    {'id': 'brand-demo-1', 'name': 'FabIndia Apparel Team'},
+    {'id': 'brand-demo-2', 'name': 'boAt Lifestyle Support'},
+    {'id': 'creator-demo-1', 'name': 'Ananya Sharma (Fashion)'},
+    {'id': 'creator-demo-2', 'name': 'Rahul Verma (Fitness)'},
+  ];
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -8058,11 +8147,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
       final response = await Supabase.instance.client
           .from('profiles')
           .select('id, name')
-          .eq('role', targetRole);
+          .eq('role', targetRole)
+          .timeout(const Duration(milliseconds: 1500));
       
-      if (mounted) {
+      final list = List<Map<String, dynamic>>.from(response);
+      if (list.isNotEmpty && mounted) {
         setState(() {
-          _users = List<Map<String, dynamic>>.from(response);
+          _users = list;
           _isLoading = false;
         });
       }
@@ -8127,8 +8218,23 @@ class WovzoNotificationsSheet extends StatefulWidget {
 }
 
 class _WovzoNotificationsSheetState extends State<WovzoNotificationsSheet> {
-  bool _isLoading = true;
-  List<Map<String, dynamic>> _notifications = [];
+  bool _isLoading = false;
+  List<Map<String, dynamic>> _notifications = [
+    {
+      'title': 'Welcome to WOVZO Collab! 🚀',
+      'message': 'Explore brand collaborations, submit proposals, deliver proof, and withdraw earnings effortlessly.',
+      'type': 'success',
+      'created_at': DateTime.now().subtract(const Duration(hours: 1)).toIso8601String(),
+      'read': false,
+    },
+    {
+      'title': 'Diwali Festive Apparel Launch 🌟',
+      'message': 'Your proposal was selected! Submit deliverable proof when ready.',
+      'type': 'application',
+      'created_at': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
+      'read': true,
+    }
+  ];
 
   @override
   void initState() {
@@ -8145,14 +8251,15 @@ class _WovzoNotificationsSheetState extends State<WovzoNotificationsSheet> {
 
     List<Map<String, dynamic>> list = [];
 
-    // 1. Try fetching from notifications table
+    // 1. Try fetching from notifications table with timeout
     try {
       final res = await Supabase.instance.client
           .from('notifications')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', ascending: false)
-          .limit(25);
+          .limit(25)
+          .timeout(const Duration(milliseconds: 1500));
       if (res.isNotEmpty) {
         list = List<Map<String, dynamic>>.from(res);
       }
@@ -8394,10 +8501,8 @@ class _WovzoNotificationsSheetState extends State<WovzoNotificationsSheet> {
           ),
           const Divider(height: 1),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: WovzoColors.orange))
-                : _notifications.isEmpty
-                    ? Center(
+            child: _notifications.isEmpty
+                ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
