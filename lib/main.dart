@@ -1651,15 +1651,34 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
+                        SnackBar(
                           content: Row(
-                            children: [
-                              Icon(Icons.check_circle, color: Colors.white, size: 18),
-                              SizedBox(width: 8),
-                              Text('Successfully applied to campaign!'),
+                            children: const [
+                              Icon(Icons.check_circle_rounded, color: Colors.white, size: 24),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Proposal Submitted Successfully! 🎉',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Your pitch is now under review by the brand.',
+                                      style: TextStyle(fontSize: 12, color: Colors.white70),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
-                          backgroundColor: Color(0xFF059669),
+                          backgroundColor: const Color(0xFF059669),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          duration: const Duration(seconds: 4),
                         ),
                       );
                     }
@@ -2078,15 +2097,34 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
 
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
+                        SnackBar(
                           content: Row(
-                            children: [
-                              Icon(Icons.check_circle, color: Colors.white, size: 18),
-                              SizedBox(width: 8),
-                              Text('Successfully applied to campaign!'),
+                            children: const [
+                              Icon(Icons.check_circle_rounded, color: Colors.white, size: 24),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Proposal Submitted Successfully! 🎉',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Your pitch is now under review by the brand.',
+                                      style: TextStyle(fontSize: 12, color: Colors.white70),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
-                          backgroundColor: Color(0xFF059669),
+                          backgroundColor: const Color(0xFF059669),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          duration: const Duration(seconds: 4),
                         ),
                       );
                     }
