@@ -1499,6 +1499,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
 
     final pitchController = TextEditingController();
+    String? validationError;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1506,99 +1508,173 @@ class _ExploreScreenState extends State<ExploreScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          left: 20,
-          right: 20,
-          top: 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Apply for $campaignTitle',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Apply for $campaignTitle',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
-            ),
-            Text('Brand: $brandName', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-            const SizedBox(height: 16),
-            const Text(
-              'Your Proposal / Pitch (Optional)',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: pitchController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Tell the brand why you are a great fit (e.g. niche, reach, video idea)...',
-                hintStyle: const TextStyle(fontSize: 13),
-                filled: true,
-                fillColor: Colors.grey[50],
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () async {
-                  final userId = Supabase.instance.client.auth.currentUser?.id;
-                  Navigator.pop(ctx);
-
-                  _globallyAppliedCampaignIds.add(campaignId);
-                  if (mounted) setState(() {});
-
-                  if (userId != null) {
-                    try {
-                      final pitchText = pitchController.text.trim();
-                      final payload = {
-                        'campaign_id': campaignId,
-                        'influencer_id': userId,
-                        'status': 'pending',
-                        if (pitchText.isNotEmpty) 'pitch': pitchText,
-                      };
-                      await Supabase.instance.client.from('applications').insert(payload);
-                    } catch (e) {}
-                  }
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Row(
-                          children: [
-                            Icon(Icons.check_circle, color: Colors.white, size: 18),
-                            SizedBox(width: 8),
-                            Text('Successfully applied to campaign!'),
-                          ],
-                        ),
-                        backgroundColor: Color(0xFF059669),
-                      ),
-                    );
+              Text('Brand: $brandName', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Your Proposal / Pitch *',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(
+                      'Required',
+                      style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold, fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: pitchController,
+                maxLines: 3,
+                onChanged: (val) {
+                  if (validationError != null && val.trim().isNotEmpty) {
+                    setSheetState(() {
+                      validationError = null;
+                    });
                   }
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: WovzoColors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                decoration: InputDecoration(
+                  hintText: 'Tell the brand why you are a great fit (e.g. niche, reach, video idea)...',
+                  hintStyle: const TextStyle(fontSize: 13),
+                  filled: true,
+                  fillColor: validationError != null ? Colors.red.shade50.withOpacity(0.3) : Colors.grey[50],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: validationError != null ? Colors.red : Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: validationError != null ? Colors.red : Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: validationError != null ? Colors.red : WovzoColors.orange, width: 2),
+                  ),
                 ),
-                child: const Text('Submit Application', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
-            ),
-          ],
+              if (validationError != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded, color: Colors.red, size: 15),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        validationError!,
+                        style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final pitchText = pitchController.text.trim();
+                    if (pitchText.isEmpty) {
+                      setSheetState(() {
+                        validationError = 'Proposal box cannot be empty! Please enter your pitch.';
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text('⚠️ Proposal box cannot be empty! Please enter your pitch.'),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: Colors.redAccent,
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final userId = Supabase.instance.client.auth.currentUser?.id;
+                    Navigator.pop(ctx);
+
+                    _globallyAppliedCampaignIds.add(campaignId);
+                    if (mounted) setState(() {});
+
+                    if (userId != null) {
+                      try {
+                        final payload = {
+                          'campaign_id': campaignId,
+                          'influencer_id': userId,
+                          'status': 'pending',
+                          'pitch': pitchText,
+                        };
+                        await Supabase.instance.client.from('applications').insert(payload);
+                      } catch (e) {}
+                    }
+
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.white, size: 18),
+                              SizedBox(width: 8),
+                              Text('Successfully applied to campaign!'),
+                            ],
+                          ),
+                          backgroundColor: Color(0xFF059669),
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: WovzoColors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Submit Application', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1848,6 +1924,7 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
     }
 
     final pitchController = TextEditingController();
+    String? validationError;
 
     showModalBottomSheet(
       context: context,
@@ -1856,101 +1933,175 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          left: 20,
-          right: 20,
-          top: 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Apply for ${widget.campaignTitle}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Apply for ${widget.campaignTitle}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
-            ),
-            Text('Brand: ${widget.brandName} • Payout: ${widget.budget}', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-            const SizedBox(height: 16),
-            const Text(
-              'Your Proposal / Pitch (Optional)',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: pitchController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Tell the brand why you are a great fit (e.g. niche, reach, video idea)...',
-                hintStyle: const TextStyle(fontSize: 13),
-                filled: true,
-                fillColor: Colors.grey[50],
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () async {
-                  final userId = Supabase.instance.client.auth.currentUser?.id;
-                  Navigator.pop(ctx);
-
-                  if (widget.campaignId != null) {
-                    _globallyAppliedCampaignIds.add(widget.campaignId!);
-                    setState(() {});
-                  }
-
-                  if (userId != null && widget.campaignId != null) {
-                    try {
-                      final pitchText = pitchController.text.trim();
-                      final payload = {
-                        'campaign_id': widget.campaignId,
-                        'influencer_id': userId,
-                        'status': 'pending',
-                        if (pitchText.isNotEmpty) 'pitch': pitchText,
-                      };
-                      await Supabase.instance.client.from('applications').insert(payload);
-                    } catch (e) {}
-                  }
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Row(
-                          children: [
-                            Icon(Icons.check_circle, color: Colors.white, size: 18),
-                            SizedBox(width: 8),
-                            Text('Successfully applied to campaign!'),
-                          ],
-                        ),
-                        backgroundColor: Color(0xFF059669),
-                      ),
-                    );
+              Text('Brand: ${widget.brandName} • Payout: ${widget.budget}', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Your Proposal / Pitch *',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(
+                      'Required',
+                      style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold, fontSize: 10),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: pitchController,
+                maxLines: 3,
+                onChanged: (val) {
+                  if (validationError != null && val.trim().isNotEmpty) {
+                    setSheetState(() {
+                      validationError = null;
+                    });
                   }
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: WovzoColors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                decoration: InputDecoration(
+                  hintText: 'Tell the brand why you are a great fit (e.g. niche, reach, video idea)...',
+                  hintStyle: const TextStyle(fontSize: 13),
+                  filled: true,
+                  fillColor: validationError != null ? Colors.red.shade50.withOpacity(0.3) : Colors.grey[50],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: validationError != null ? Colors.red : Colors.grey[300]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: validationError != null ? Colors.red : Colors.grey[300]!),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: validationError != null ? Colors.red : WovzoColors.orange, width: 2),
+                  ),
                 ),
-                child: const Text('Submit Application', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
-            ),
-          ],
+              if (validationError != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded, color: Colors.red, size: 15),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        validationError!,
+                        style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final pitchText = pitchController.text.trim();
+                    if (pitchText.isEmpty) {
+                      setSheetState(() {
+                        validationError = 'Proposal box cannot be empty! Please enter your pitch.';
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text('⚠️ Proposal box cannot be empty! Please enter your pitch.'),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: Colors.redAccent,
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final userId = Supabase.instance.client.auth.currentUser?.id;
+                    Navigator.pop(ctx);
+
+                    if (widget.campaignId != null) {
+                      _globallyAppliedCampaignIds.add(widget.campaignId!);
+                      setState(() {});
+                    }
+
+                    if (userId != null && widget.campaignId != null) {
+                      try {
+                        final payload = {
+                          'campaign_id': widget.campaignId,
+                          'influencer_id': userId,
+                          'status': 'pending',
+                          'pitch': pitchText,
+                        };
+                        await Supabase.instance.client.from('applications').insert(payload);
+                      } catch (e) {}
+                    }
+
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.white, size: 18),
+                              SizedBox(width: 8),
+                              Text('Successfully applied to campaign!'),
+                            ],
+                          ),
+                          backgroundColor: Color(0xFF059669),
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: WovzoColors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Submit Application', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
