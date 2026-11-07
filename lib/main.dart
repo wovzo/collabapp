@@ -5815,7 +5815,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } else {
       // Offline fallback: load from _registeredAccountDetails
       final fallbackEmail = _activeSessionEmail;
-      final acc = _registeredAccountDetails[fallbackEmail] ?? _registeredAccountDetails['asrafgiimi@gmail.com'];
+      final acc = _LoginScreenState._registeredAccountDetails[fallbackEmail] ?? _LoginScreenState._registeredAccountDetails['asrafgiimi@gmail.com'];
       _email = fallbackEmail;
       if (acc != null) {
         if (acc['name'] != null && acc['name']!.isNotEmpty) _name = acc['name']!;
@@ -5960,8 +5960,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _localProfileCache['is_verified'] = _isVerified;
     _localProfileCache['verification_code'] = _verificationCode;
 
-    _registeredAccountDetails[_activeSessionEmail] = {
-      ...(_registeredAccountDetails[_activeSessionEmail] ?? {}),
+    _LoginScreenState._registeredAccountDetails[_activeSessionEmail] = {
+      ...(_LoginScreenState._registeredAccountDetails[_activeSessionEmail] ?? {}),
       'name': newName.isNotEmpty ? newName : _name,
       'bio': newBio,
       'niche': newNiche,
@@ -6204,8 +6204,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _localProfileCache['is_verified'] = true;
     _localProfileCache['verification_code'] = _verificationCode;
 
-    _registeredAccountDetails[_activeSessionEmail] = {
-      ...(_registeredAccountDetails[_activeSessionEmail] ?? {}),
+    _LoginScreenState._registeredAccountDetails[_activeSessionEmail] = {
+      ...(_LoginScreenState._registeredAccountDetails[_activeSessionEmail] ?? {}),
       'is_verified': 'true',
       'verification_code': _verificationCode,
     };
