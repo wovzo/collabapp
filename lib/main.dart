@@ -458,6 +458,7 @@ class _LoginScreenState extends State<LoginScreen> {
             });
           } catch (_) {}
 
+          _activeSessionEmail = cleanEmail;
           resetWovzoUserSession();
           if (mounted) {
             if (normSelected == 'brand') {
@@ -687,6 +688,7 @@ class _LoginScreenState extends State<LoginScreen> {
           }
 
           // Verified credentials - proceed into dashboard
+          _activeSessionEmail = cleanEmail;
           resetWovzoUserSession();
           if (mounted) {
             if (normSelected == 'brand') {
@@ -723,6 +725,7 @@ class _LoginScreenState extends State<LoginScreen> {
             'brand_name': normSelected == 'brand' ? offlineBrand : '',
           };
 
+          _activeSessionEmail = cleanEmail;
           resetWovzoUserSession();
           if (mounted) {
             if (normSelected == 'brand') {
@@ -1304,6 +1307,7 @@ class ExploreScreen extends StatefulWidget {
 // Globally track applied campaign IDs and in-memory submissions across screens
 final Set<String> _globallyAppliedCampaignIds = <String>{};
 final List<Map<String, dynamic>> _globallySubmittedApplications = <Map<String, dynamic>>[];
+String _activeSessionEmail = 'asrafgiimi@gmail.com';
 
 void resetWovzoUserSession() {
   _globallyAppliedCampaignIds.clear();
@@ -5808,6 +5812,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       // Query Stats
       await _loadStats(user.id);
+    } else {
+      // Offline fallback: load from _registeredAccountDetails
+      final fallbackEmail = _activeSessionEmail;
+      final acc = _registeredAccountDetails[fallbackEmail] ?? _registeredAccountDetails['asrafgiimi@gmail.com'];
+      _email = fallbackEmail;
+      if (acc != null) {
+        if (acc['name'] != null && acc['name']!.isNotEmpty) _name = acc['name']!;
+        if (acc['role'] != null && acc['role']!.isNotEmpty) _role = acc['role']!;
+        if (acc['bio'] != null && acc['bio']!.isNotEmpty) _bio = acc['bio']!;
+        if (acc['niche'] != null && acc['niche']!.isNotEmpty) _niche = acc['niche']!;
+        if (acc['instagram'] != null && acc['instagram']!.isNotEmpty) _instagram = acc['instagram']!;
+        if (acc['youtube'] != null && acc['youtube']!.isNotEmpty) _youtube = acc['youtube']!;
+        if (acc['location'] != null && acc['location']!.isNotEmpty) _location = acc['location']!;
+        if (acc['phone'] != null && acc['phone']!.isNotEmpty) _phone = acc['phone']!;
+        if (acc['website'] != null && acc['website']!.isNotEmpty) _website = acc['website']!;
+        if (acc['avatar_url'] != null && acc['avatar_url']!.isNotEmpty) _avatarUrl = acc['avatar_url']!;
+      }
     }
 
     // Always restore in-memory profile edits if user modified profile in this session
@@ -5938,6 +5959,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _localProfileCache['avatar_url'] = newAvatar;
     _localProfileCache['is_verified'] = _isVerified;
     _localProfileCache['verification_code'] = _verificationCode;
+
+    _registeredAccountDetails[_activeSessionEmail] = {
+      ...(_registeredAccountDetails[_activeSessionEmail] ?? {}),
+      'name': newName.isNotEmpty ? newName : _name,
+      'bio': newBio,
+      'niche': newNiche,
+      'instagram': newInsta,
+      'youtube': newYt,
+      'location': newLoc,
+      'phone': newPhone,
+      'website': newWeb,
+      'avatar_url': newAvatar,
+      'role': _role,
+    };
 
     // 2. Sync to Supabase in background
     try {
