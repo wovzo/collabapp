@@ -6100,14 +6100,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         cleanHandle = 'asraftalk';
       }
 
-      final isTargetHandle = cleanHandle.toLowerCase() == 'asraftalk' || 
-                             cleanHandle.toLowerCase() == 'asrafgiimi';
-
-      if (isTargetHandle && _verificationCode.startsWith('WOVZO-')) {
-        isMatch = true;
-        statusMessage = '🎉 Code $_verificationCode confirmed in @$cleanHandle profile! Verified Blue Badge activated!';
-      }
-
       final endpoint = Uri.parse(
         'https://wovzo.com/collab/verify_bio.php?platform=$platform&handle=${Uri.encodeComponent(cleanHandle)}&code=${Uri.encodeComponent(_verificationCode)}',
       );
