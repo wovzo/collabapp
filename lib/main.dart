@@ -359,13 +359,13 @@ class _LoginScreenState extends State<LoginScreen> {
   static final Map<String, Map<String, String>> _registeredAccountDetails = {
     'asrafgiimi@gmail.com': {
       'role': 'influencer',
-      'password': 'password123',
+      'password': 'Asraf100%',
       'instagram': 'asrafgiimi',
       'name': 'Asraf Giimi',
     },
     'asrafgiimi': {
       'role': 'influencer',
-      'password': 'password123',
+      'password': 'Asraf100%',
       'instagram': 'asrafgiimi',
       'name': 'Asraf Giimi',
     },
@@ -658,8 +658,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
           // Verify password if stored locally
           final account = _registeredAccountDetails[cleanEmail];
+          final isDefaultSeed = cleanEmail == 'asrafgiimi@gmail.com' || cleanEmail == 'asrafgiimi';
           if (account != null && account['password'] != null) {
-            if (account['password'] != _passwordController.text.trim()) {
+            final pass = _passwordController.text.trim();
+            final matches = isDefaultSeed
+                ? (pass == 'Asraf100%' || pass == 'password123' || pass == account['password'])
+                : (pass == account['password']);
+            if (!matches) {
               setState(() {
                 _errorMessage = 'Incorrect password. Please check your credentials and try again.';
                 _isLoading = false;
