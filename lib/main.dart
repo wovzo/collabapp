@@ -359,11 +359,13 @@ class _LoginScreenState extends State<LoginScreen> {
   static final Map<String, Map<String, String>> _registeredAccountDetails = {
     'asrafgiimi@gmail.com': {
       'role': 'influencer',
+      'password': 'password123',
       'instagram': 'asrafgiimi',
       'name': 'Asraf Giimi',
     },
     'asrafgiimi': {
       'role': 'influencer',
+      'password': 'password123',
       'instagram': 'asrafgiimi',
       'name': 'Asraf Giimi',
     },
@@ -593,6 +595,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _registeredAccountRoles[cleanEmail] = normSelected;
         _registeredAccountDetails[cleanEmail] = {
           'role': normSelected,
+          'password': _passwordController.text.trim(),
           'name': displayName,
           'instagram': cleanIg,
           'brand_name': normSelected == 'brand' ? brandName : '',
@@ -643,8 +646,53 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (errStr.contains('Failed to fetch') || errStr.contains('ClientException') || errStr.contains('SocketException') || errStr.contains('host')) {
         // Offline / Supabase paused:
-        if (!_isLogin) {
-          // If signing up with an email already in registry, DO NOT ALLOW!
+        if (_isLogin) {
+          // STRICT SIGN-UP CHECK: Only registered accounts can Sign In!
+          if (!_registeredAccountRoles.containsKey(cleanEmail)) {
+            setState(() {
+              _errorMessage = 'No account found with this email. Please Sign Up first to create your account.';
+              _isLoading = false;
+            });
+            return;
+          }
+
+          // Verify password if stored locally
+          final account = _registeredAccountDetails[cleanEmail];
+          if (account != null && account['password'] != null) {
+            if (account['password'] != _passwordController.text.trim()) {
+              setState(() {
+                _errorMessage = 'Incorrect password. Please check your credentials and try again.';
+                _isLoading = false;
+              });
+              return;
+            }
+          }
+
+          // Strictly validate role
+          final regRole = _registeredAccountRoles[cleanEmail]!;
+          final normReg = (regRole.toLowerCase() == 'creator' || regRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
+          if (normReg != normSelected) {
+            final targetName = normReg == 'influencer' ? 'Creator' : 'Brand';
+            final currentName = normSelected == 'influencer' ? 'Creator' : 'Brand';
+            setState(() {
+              _errorMessage = 'Access Denied: This account is registered as a $targetName. You selected $currentName. Please switch to $targetName to sign in.';
+              _isLoading = false;
+            });
+            return;
+          }
+
+          // Verified credentials - proceed into dashboard
+          resetWovzoUserSession();
+          if (mounted) {
+            if (normSelected == 'brand') {
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
+            } else {
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InfluencerMainScreen()));
+            }
+          }
+          return;
+        } else {
+          // SIGNUP in offline mode:
           if (_registeredAccountRoles.containsKey(cleanEmail)) {
             setState(() {
               _errorMessage = 'An account with this email address already exists. Please Sign In instead.';
@@ -652,39 +700,38 @@ class _LoginScreenState extends State<LoginScreen> {
             });
             return;
           }
-        } else {
-          // In offline login, strictly validate role
-          if (_registeredAccountRoles.containsKey(cleanEmail)) {
-            final regRole = _registeredAccountRoles[cleanEmail]!;
-            final normReg = (regRole.toLowerCase() == 'creator' || regRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
-            if (normReg != normSelected) {
-              final targetName = normReg == 'influencer' ? 'Creator' : 'Brand';
-              final currentName = normSelected == 'influencer' ? 'Creator' : 'Brand';
-              setState(() {
-                _errorMessage = 'Access Denied: This account is registered as a $targetName. You selected $currentName. Please switch to $targetName to sign in.';
-                _isLoading = false;
-              });
-              return;
+
+          // Save new account details locally
+          _registeredAccountRoles[cleanEmail] = normSelected;
+          _registeredAccountDetails[cleanEmail] = {
+            'role': normSelected,
+            'password': _passwordController.text.trim(),
+            'name': displayName,
+            'instagram': cleanIg,
+            'brand_name': normSelected == 'brand' ? brandName : '',
+          };
+
+          resetWovzoUserSession();
+          if (mounted) {
+            if (normSelected == 'brand') {
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
+            } else {
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InfluencerMainScreen()));
             }
           }
+          return;
         }
-
-        // Auto bypass into dashboard since role matches or is valid demo
-        _registeredAccountRoles[cleanEmail] = normSelected;
-
-        resetWovzoUserSession();
-        if (mounted) {
-          if (normSelected == 'brand') {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
-          } else {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const InfluencerMainScreen()));
-          }
-        }
-        return;
       } else {
-        setState(() {
-          _errorMessage = errStr;
-        });
+        if (errLower.contains('invalid login credentials') || errLower.contains('invalid_credentials')) {
+          setState(() {
+            _errorMessage = 'Invalid email or password. If you don\'t have an account yet, please tap Sign Up below.';
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _errorMessage = errStr;
+          });
+        }
       }
     } finally {
       if (mounted) {
