@@ -6089,17 +6089,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
+    String cleanHandle = handle.replaceAll('@', '').trim();
+    if (cleanHandle.toLowerCase() == 'asraf_talk') {
+      cleanHandle = 'asraftalk';
+    }
+
     setState(() => _isVerifyingBio = true);
 
     bool isMatch = false;
     String statusMessage = '';
 
     try {
-      var cleanHandle = handle.replaceAll('@', '').trim();
-      if (cleanHandle.toLowerCase() == 'asraf_talk') {
-        cleanHandle = 'asraftalk';
-      }
-
       final endpoint = Uri.parse(
         'https://wovzo.com/collab/verify_bio.php?platform=$platform&handle=${Uri.encodeComponent(cleanHandle)}&code=${Uri.encodeComponent(_verificationCode)}',
       );
@@ -6121,7 +6121,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Client-side fallback check if live endpoint was unreachable
     if (!isMatch && statusMessage.isEmpty) {
       try {
-        final cleanHandle = handle.replaceAll('@', '').trim();
         final proxyUrl = platform == 'youtube'
             ? Uri.parse('https://api.allorigins.win/raw?url=${Uri.encodeComponent("https://www.youtube.com/@$cleanHandle")}')
             : Uri.parse('https://api.allorigins.win/raw?url=${Uri.encodeComponent("https://imginn.com/$cleanHandle/")}');
