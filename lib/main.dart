@@ -6844,16 +6844,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _avatarUrlController,
-                      decoration: const InputDecoration(
-                        labelText: 'Profile Picture URL (Optional)',
-                        hintText: 'https://...',
-                        prefixIcon: Icon(Icons.image_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+
                     const SizedBox(height: 14),
                     TextField(
                       controller: _nameController,
