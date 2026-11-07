@@ -365,6 +365,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    resetWovzoUserSession();
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final AuthChangeEvent event = data.event;
       if (event == AuthChangeEvent.passwordRecovery && mounted) {
@@ -442,6 +443,7 @@ class _LoginScreenState extends State<LoginScreen> {
             });
           } catch (_) {}
 
+          resetWovzoUserSession();
           if (mounted) {
             if (normSelected == 'brand') {
               Navigator.pushReplacement(
@@ -501,6 +503,7 @@ class _LoginScreenState extends State<LoginScreen> {
           } catch (_) {}
         }
         
+        resetWovzoUserSession();
         if (mounted && response.user != null) {
           Navigator.pushReplacement(
             context,
@@ -533,6 +536,7 @@ class _LoginScreenState extends State<LoginScreen> {
         // Auto bypass into dashboard since role matches or is valid demo
         _registeredAccountRoles[cleanEmail] = normSelected;
 
+        resetWovzoUserSession();
         if (mounted) {
           if (normSelected == 'brand') {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const BrandMainScreen()));
@@ -1102,8 +1106,14 @@ class ExploreScreen extends StatefulWidget {
   State<ExploreScreen> createState() => _ExploreScreenState();
 }
 
-// Globally track applied campaign IDs in memory across screens
-final Set<String> _globallyAppliedCampaignIds = {'exp-3'};
+// Globally track applied campaign IDs and in-memory submissions across screens
+final Set<String> _globallyAppliedCampaignIds = <String>{};
+final List<Map<String, dynamic>> _globallySubmittedApplications = <Map<String, dynamic>>[];
+
+void resetWovzoUserSession() {
+  _globallyAppliedCampaignIds.clear();
+  _globallySubmittedApplications.clear();
+}
 
 class _ExploreScreenState extends State<ExploreScreen> {
   String _searchQuery = '';
@@ -1488,7 +1498,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  void _showApplyBottomSheet(BuildContext context, String campaignId, String campaignTitle, String brandName) {
+  void _showApplyBottomSheet(BuildContext context, String campaignId, String campaignTitle, String brandName, {String budget = '₹15,000'}) {
     if (_globallyAppliedCampaignIds.contains(campaignId)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You have already applied to this campaign!')),
@@ -1636,6 +1646,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
                       // 2. Mark as applied locally and update UI
                       _globallyAppliedCampaignIds.add(campaignId);
+                      _globallySubmittedApplications.insert(0, {
+                        'id': 'app-${DateTime.now().millisecondsSinceEpoch}',
+                        'campaign_id': campaignId,
+                        'status': 'pending',
+                        'pitch': pitchText,
+                        'created_at': DateTime.now().toIso8601String(),
+                        'campaigns': {
+                          'id': campaignId,
+                          'title': campaignTitle,
+                          'budget': budget,
+                          'profiles': {'name': brandName}
+                        }
+                      });
                       if (mounted) setState(() {});
 
                       // 3. Display floating success toast
@@ -1883,7 +1906,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       ? null
                       : () {
                           if (campaignId != null) {
-                            _showApplyBottomSheet(context, campaignId, campaignTitle, brandName);
+                            _showApplyBottomSheet(context, campaignId, campaignTitle, brandName, budget: budget);
                           }
                         },
                   icon: Icon(
@@ -2090,6 +2113,19 @@ class _CampaignDetailsScreenState extends State<CampaignDetailsScreen> {
                       // 2. Mark as applied locally and update UI
                       if (widget.campaignId != null) {
                         _globallyAppliedCampaignIds.add(widget.campaignId!);
+                        _globallySubmittedApplications.insert(0, {
+                          'id': 'app-${DateTime.now().millisecondsSinceEpoch}',
+                          'campaign_id': widget.campaignId,
+                          'status': 'pending',
+                          'pitch': pitchText,
+                          'created_at': DateTime.now().toIso8601String(),
+                          'campaigns': {
+                            'id': widget.campaignId,
+                            'title': widget.campaignTitle,
+                            'budget': widget.budget,
+                            'profiles': {'name': widget.brandName}
+                          }
+                        });
                         setState(() {});
                       }
 
@@ -2476,7 +2512,8 @@ class _BrandCampaignsScreenState extends State<BrandCampaignsScreen> {
             .order('created_at', ascending: false)
             .timeout(const Duration(milliseconds: 1500));
         final list = List<Map<String, dynamic>>.from(data);
-        if (list.isNotEmpty && mounted) {
+        resetWovzoUserSession();
+        if (mounted) {
           setState(() {
             _brandCampaigns = list;
           });
@@ -2712,7 +2749,7 @@ class _BrandApplicantsScreenState extends State<BrandApplicantsScreen> {
       final filtered = userId != null
           ? list.where((app) => app['campaigns'] != null && app['campaigns']['brand_id'] == userId).toList()
           : list;
-      if (filtered.isNotEmpty && mounted) {
+      if (mounted) {
         setState(() {
           _applicants = filtered;
         });
@@ -3288,33 +3325,7 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
     );
   }
 
-  static final List<Map<String, dynamic>> _demoApplications = [
-    {
-      'id': 'demo-app-1',
-      'status': 'accepted',
-      'submission_url': 'https://instagram.com/reel/demo_collab_wovzo',
-      'submission_notes': 'Demo deliverable submission ready for brand review',
-      'submitted_at': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
-      'campaigns': {
-        'id': 'c-1',
-        'title': 'Diwali Festive Apparel Launch',
-        'budget': 15000,
-        'profiles': {'name': 'FabIndia Apparel'}
-      }
-    },
-    {
-      'id': 'demo-app-2',
-      'status': 'pending',
-      'campaigns': {
-        'id': 'c-2',
-        'title': 'Organic Protein Shake Reel Campaign',
-        'budget': 8500,
-        'profiles': {'name': 'HealthMax Nutrition'}
-      }
-    }
-  ];
-
-  List<Map<String, dynamic>> _applications = List.from(_demoApplications);
+  List<Map<String, dynamic>> _applications = List.from(_globallySubmittedApplications);
 
   @override
   void initState() {
@@ -3333,12 +3344,26 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
             .order('created_at', ascending: false)
             .timeout(const Duration(milliseconds: 1500));
         final list = List<Map<String, dynamic>>.from(res);
-        if (list.isNotEmpty && mounted) {
+        if (mounted) {
           setState(() {
-            _applications = list;
+            final remoteCampIds = list.map((a) => a['campaign_id']?.toString() ?? a['id']?.toString()).toSet();
+            final localOnly = _globallySubmittedApplications.where((a) => !remoteCampIds.contains(a['campaign_id']?.toString()));
+            _applications = [...localOnly, ...list];
           });
         }
-      } catch (_) {}
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _applications = List.from(_globallySubmittedApplications);
+          });
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _applications = List.from(_globallySubmittedApplications);
+        });
+      }
     }
   }
 
@@ -3364,13 +3389,37 @@ class _ApplicationsScreenState extends State<ApplicationsScreen> {
             Expanded(
               child: _applications.isEmpty
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
-                          const SizedBox(height: 12),
-                          Text('You haven\'t applied to any campaigns yet.', style: TextStyle(color: Colors.grey[600])),
-                        ],
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.assignment_outlined, size: 40, color: WovzoColors.orange),
+                            ),
+                            const SizedBox(height: 18),
+                            const Text(
+                              'No Applications Yet',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: WovzoColors.deepBlack,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'You haven\'t applied to any campaigns yet.\nBrowse active brand campaigns and submit your pitch!',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey[600], fontSize: 13, height: 1.4),
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -7061,6 +7110,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
+              resetWovzoUserSession();
               await Supabase.instance.client.auth.signOut();
               if (mounted) {
                 Navigator.pushReplacement(
