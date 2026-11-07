@@ -5667,6 +5667,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _website = '';
   String _avatarUrl = '';
   bool _isVerified = false;
+  String _verifiedInstagram = '';
   String _verificationCode = 'WOVZO-2401';
   bool _isVerifyingBio = false;
 
@@ -5845,8 +5846,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (_localProfileCache['website'] != null) _website = _localProfileCache['website'].toString();
       if (_localProfileCache['avatar_url'] != null) _avatarUrl = _localProfileCache['avatar_url'].toString();
       if (_localProfileCache['is_verified'] == true) _isVerified = true;
+      if (_localProfileCache['verified_instagram'] != null) {
+        _verifiedInstagram = _localProfileCache['verified_instagram'].toString();
+      }
       if (_localProfileCache['verification_code'] != null && _localProfileCache['verification_code'].toString().isNotEmpty) {
         _verificationCode = _localProfileCache['verification_code'].toString();
+      }
+    }
+
+    if (_isVerified && _verifiedInstagram.isEmpty && _instagram.isNotEmpty) {
+      _verifiedInstagram = _instagram.replaceAll('@', '').trim();
+    }
+    if (_isVerified && _verifiedInstagram.isNotEmpty) {
+      final curClean = _instagram.replaceAll('@', '').trim().toLowerCase();
+      final verClean = _verifiedInstagram.replaceAll('@', '').trim().toLowerCase();
+      if (curClean != verClean) {
+        _isVerified = false;
       }
     }
 
@@ -5933,6 +5948,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final newWeb = _websiteController.text.trim();
     final newAvatar = _avatarUrlController.text.trim();
 
+    // If handle changed and no longer matches verified handle, revoke verification!
+    final curClean = newInsta.replaceAll('@', '').trim().toLowerCase();
+    final verClean = _verifiedInstagram.replaceAll('@', '').trim().toLowerCase();
+    if (_isVerified && verClean.isNotEmpty && curClean != verClean) {
+      _isVerified = false;
+      _verifiedInstagram = '';
+    }
+
     // 1. Immediately apply to state & in-memory cache so updates show instantly!
     if (mounted) {
       setState(() {
@@ -5958,6 +5981,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _localProfileCache['website'] = newWeb;
     _localProfileCache['avatar_url'] = newAvatar;
     _localProfileCache['is_verified'] = _isVerified;
+    _localProfileCache['verified_instagram'] = _verifiedInstagram;
     _localProfileCache['verification_code'] = _verificationCode;
 
     _LoginScreenState._registeredAccountDetails[_activeSessionEmail] = {
@@ -6077,8 +6101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
 
       final isTargetHandle = cleanHandle.toLowerCase() == 'asraftalk' || 
-                             cleanHandle.toLowerCase() == 'asrafgiimi' || 
-                             cleanHandle.toLowerCase().contains('asraf');
+                             cleanHandle.toLowerCase() == 'asrafgiimi';
 
       if (isTargetHandle && _verificationCode.startsWith('WOVZO-')) {
         isMatch = true;
@@ -6201,18 +6224,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       debugPrint('Bio verification sync error: $e');
     }
 
+    _verifiedInstagram = cleanHandle;
     _localProfileCache['is_verified'] = true;
+    _localProfileCache['verified_instagram'] = cleanHandle;
     _localProfileCache['verification_code'] = _verificationCode;
 
     _LoginScreenState._registeredAccountDetails[_activeSessionEmail] = {
       ...(_LoginScreenState._registeredAccountDetails[_activeSessionEmail] ?? {}),
       'is_verified': 'true',
+      'verified_instagram': cleanHandle,
       'verification_code': _verificationCode,
     };
 
     if (mounted) {
       setState(() {
         _isVerified = true;
+        _verifiedInstagram = cleanHandle;
         _isVerifyingBio = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6269,7 +6296,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         } catch (_) {}
       }
 
+      _verifiedInstagram = _instagram.replaceAll('@', '').trim();
       _localProfileCache['is_verified'] = true;
+      _localProfileCache['verified_instagram'] = _verifiedInstagram;
       _localProfileCache['verification_code'] = _verificationCode;
 
       if (mounted) {
@@ -7982,6 +8011,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               'Your ownership of ${_instagram.isNotEmpty ? _instagram : "your profile"} is officially verified via secret bio code ($_verificationCode). You get priority visibility for top brand sponsorships!',
               style: TextStyle(fontSize: 12, color: Colors.green.shade900, height: 1.4),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isVerified = false;
+                    _verifiedInstagram = '';
+                    _localProfileCache['is_verified'] = false;
+                    _localProfileCache['verified_instagram'] = '';
+                  });
+                },
+                icon: const Icon(Icons.refresh, size: 14, color: Colors.grey),
+                label: const Text('Re-verify Bio Code', style: TextStyle(fontSize: 11, color: Colors.grey)),
+              ),
             ),
           ] else ...[
             Text(
