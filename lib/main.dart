@@ -701,14 +701,21 @@ class _LoginScreenState extends State<LoginScreen> {
             return;
           }
 
+          final offlineIg = _instagramController.text.trim().replaceAll('@', '').toLowerCase();
+          final offlineBrand = _brandNameController.text.trim();
+          final offlineName = _nameController.text.trim();
+          final offlineDisplay = normSelected == 'brand'
+              ? (offlineBrand.isNotEmpty ? offlineBrand : (offlineName.isNotEmpty ? offlineName : 'Brand'))
+              : (offlineName.isNotEmpty ? offlineName : 'Creator');
+
           // Save new account details locally
           _registeredAccountRoles[cleanEmail] = normSelected;
           _registeredAccountDetails[cleanEmail] = {
             'role': normSelected,
             'password': _passwordController.text.trim(),
-            'name': displayName,
-            'instagram': cleanIg,
-            'brand_name': normSelected == 'brand' ? brandName : '',
+            'name': offlineDisplay,
+            'instagram': offlineIg,
+            'brand_name': normSelected == 'brand' ? offlineBrand : '',
           };
 
           resetWovzoUserSession();
