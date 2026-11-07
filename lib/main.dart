@@ -356,6 +356,19 @@ class _LoginScreenState extends State<LoginScreen> {
     'asrafgiimi': 'influencer',
   };
 
+  static final Map<String, Map<String, String>> _registeredAccountDetails = {
+    'asrafgiimi@gmail.com': {
+      'role': 'influencer',
+      'instagram': 'asrafgiimi',
+      'name': 'Asraf Giimi',
+    },
+    'asrafgiimi': {
+      'role': 'influencer',
+      'instagram': 'asrafgiimi',
+      'name': 'Asraf Giimi',
+    },
+  };
+
   bool _isLogin = true;
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -460,17 +473,87 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
       } else {
-        // SIGNUP
-        _registeredAccountRoles[cleanEmail] = normSelected;
-
-        final vCode = 'WOVZO-${1000 + (DateTime.now().millisecondsSinceEpoch % 9000)}';
-        final igHandle = _instagramController.text.trim();
-        final ytChannel = _youtubeController.text.trim();
+        // SIGNUP - STRICT DUPLICATE ACCOUNT RESTRICTION
+        final cleanIg = _instagramController.text.trim().replaceAll('@', '').toLowerCase();
         final brandName = _brandNameController.text.trim();
+        final cleanBrand = brandName.toLowerCase();
         final contactName = _nameController.text.trim();
         final displayName = normSelected == 'brand'
             ? (brandName.isNotEmpty ? brandName : (contactName.isNotEmpty ? contactName : 'Brand'))
             : (contactName.isNotEmpty ? contactName : 'Creator');
+
+        // 1. Check if email already registered
+        if (_registeredAccountRoles.containsKey(cleanEmail)) {
+          setState(() {
+            _errorMessage = 'An account with this email address already exists. Please Sign In instead.';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        // 2. Prevent same creator from creating multiple accounts with same Instagram handle
+        if (normSelected == 'influencer' && cleanIg.isNotEmpty) {
+          for (final entry in _registeredAccountDetails.values) {
+            if (entry['instagram']?.toLowerCase() == cleanIg) {
+              setState(() {
+                _errorMessage = 'This Instagram handle (@$cleanIg) is already registered with an existing account. Multiple accounts are not allowed.';
+                _isLoading = false;
+              });
+              return;
+            }
+          }
+
+          try {
+            final existingIg = await Supabase.instance.client
+                .from('profiles')
+                .select('id, name')
+                .ilike('instagram', '%$cleanIg%')
+                .limit(1)
+                .maybeSingle()
+                .timeout(const Duration(milliseconds: 1500));
+            if (existingIg != null) {
+              setState(() {
+                _errorMessage = 'This Instagram handle (@$cleanIg) is already registered with an existing account. Multiple accounts are not allowed.';
+                _isLoading = false;
+              });
+              return;
+            }
+          } catch (_) {}
+        }
+
+        // 3. Prevent duplicate brand accounts
+        if (normSelected == 'brand' && cleanBrand.length >= 3) {
+          for (final entry in _registeredAccountDetails.values) {
+            if (entry['brand_name']?.toLowerCase() == cleanBrand) {
+              setState(() {
+                _errorMessage = 'A brand named "$brandName" is already registered. Duplicate brand accounts are not allowed.';
+                _isLoading = false;
+              });
+              return;
+            }
+          }
+
+          try {
+            final existingBrand = await Supabase.instance.client
+                .from('profiles')
+                .select('id, name')
+                .eq('role', 'brand')
+                .ilike('name', cleanBrand)
+                .limit(1)
+                .maybeSingle()
+                .timeout(const Duration(milliseconds: 1500));
+            if (existingBrand != null) {
+              setState(() {
+                _errorMessage = 'A brand named "$brandName" is already registered. Duplicate brand accounts are not allowed.';
+                _isLoading = false;
+              });
+              return;
+            }
+          } catch (_) {}
+        }
+
+        final vCode = 'WOVZO-${1000 + (DateTime.now().millisecondsSinceEpoch % 9000)}';
+        final ytChannel = _youtubeController.text.trim();
 
         final response = await Supabase.instance.client.auth.signUp(
           email: _emailController.text.trim(),
@@ -480,7 +563,7 @@ class _LoginScreenState extends State<LoginScreen> {
             'brand_name': normSelected == 'brand' ? brandName : '',
             'contact_name': contactName,
             'role': normSelected,
-            'instagram': igHandle,
+            'instagram': cleanIg.isNotEmpty ? '@$cleanIg' : '',
             'youtube': ytChannel,
             'verification_code': vCode,
             'is_verified': false,
@@ -489,13 +572,39 @@ class _LoginScreenState extends State<LoginScreen> {
           },
         );
 
+        // Supabase returns an empty identities list if user already exists
+        if (response.user != null && response.user!.identities != null && response.user!.identities!.isEmpty) {
+          setState(() {
+            _errorMessage = 'An account with this email address already exists. Please Sign In instead.';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        if (response.user == null) {
+          setState(() {
+            _errorMessage = 'Could not create account. If you already have an account, please Sign In.';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        // Save successfully created account to registry
+        _registeredAccountRoles[cleanEmail] = normSelected;
+        _registeredAccountDetails[cleanEmail] = {
+          'role': normSelected,
+          'name': displayName,
+          'instagram': cleanIg,
+          'brand_name': normSelected == 'brand' ? brandName : '',
+        };
+
         if (response.user != null) {
           try {
             await Supabase.instance.client.from('profiles').upsert({
               'id': response.user!.id,
               'name': displayName,
               'role': normSelected,
-              'instagram': igHandle,
+              'instagram': cleanIg.isNotEmpty ? '@$cleanIg' : '',
               'youtube': ytChannel,
               'verification_code': vCode,
               'is_verified': false,
@@ -504,7 +613,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
         
         resetWovzoUserSession();
-        if (mounted && response.user != null) {
+        if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -518,18 +627,45 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       final errStr = e is AuthException ? e.message : e.toString();
+      final errLower = errStr.toLowerCase();
+
+      // Check if error is about already registered / duplicate account
+      if (errLower.contains('already registered') || 
+          errLower.contains('already exists') || 
+          errLower.contains('user_already_exists') ||
+          errLower.contains('unique constraint')) {
+        setState(() {
+          _errorMessage = 'An account with this email address already exists. Please Sign In instead.';
+          _isLoading = false;
+        });
+        return;
+      }
+
       if (errStr.contains('Failed to fetch') || errStr.contains('ClientException') || errStr.contains('SocketException') || errStr.contains('host')) {
-        // Offline / Supabase paused: strictly validate locally registered role!
-        if (_registeredAccountRoles.containsKey(cleanEmail)) {
-          final regRole = _registeredAccountRoles[cleanEmail]!;
-          final normReg = (regRole.toLowerCase() == 'creator' || regRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
-          if (normReg != normSelected) {
-            final targetName = normReg == 'influencer' ? 'Creator' : 'Brand';
-            final currentName = normSelected == 'influencer' ? 'Creator' : 'Brand';
+        // Offline / Supabase paused:
+        if (!_isLogin) {
+          // If signing up with an email already in registry, DO NOT ALLOW!
+          if (_registeredAccountRoles.containsKey(cleanEmail)) {
             setState(() {
-              _errorMessage = 'Access Denied: This account is registered as a $targetName. You selected $currentName. Please switch to $targetName to sign in.';
+              _errorMessage = 'An account with this email address already exists. Please Sign In instead.';
+              _isLoading = false;
             });
             return;
+          }
+        } else {
+          // In offline login, strictly validate role
+          if (_registeredAccountRoles.containsKey(cleanEmail)) {
+            final regRole = _registeredAccountRoles[cleanEmail]!;
+            final normReg = (regRole.toLowerCase() == 'creator' || regRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
+            if (normReg != normSelected) {
+              final targetName = normReg == 'influencer' ? 'Creator' : 'Brand';
+              final currentName = normSelected == 'influencer' ? 'Creator' : 'Brand';
+              setState(() {
+                _errorMessage = 'Access Denied: This account is registered as a $targetName. You selected $currentName. Please switch to $targetName to sign in.';
+                _isLoading = false;
+              });
+              return;
+            }
           }
         }
 
