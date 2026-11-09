@@ -345,9 +345,23 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _scaleAnimation;
-  late final Animation<double> _fadeAnimation;
-  late final Animation<double> _taglineFadeAnimation;
+
+  // Convergence animations
+  late final Animation<double> _brandSlide;
+  late final Animation<double> _creatorSlide;
+  late final Animation<double> _nodesFadeIn;
+  late final Animation<double> _nodesFadeOut;
+
+  // Fusion & Ripple
+  late final Animation<double> _rippleScale;
+  late final Animation<double> _rippleOpacity;
+
+  // Logo & Content reveal
+  late final Animation<double> _logoScale;
+  late final Animation<double> _logoFade;
+  late final Animation<double> _detailsFade;
+
+  bool _navigated = false;
 
   @override
   void initState() {
@@ -363,27 +377,72 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 2600),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.82, end: 1.0).animate(
+    // Nodes slide inwards
+    _brandSlide = Tween<double>(begin: -110.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.7, curve: Curves.easeOutBack),
+        curve: const Interval(0.05, 0.46, curve: Curves.easeInOutCubic),
       ),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _creatorSlide = Tween<double>(begin: 110.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
+        curve: const Interval(0.05, 0.46, curve: Curves.easeInOutCubic),
       ),
     );
 
-    _taglineFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _nodesFadeIn = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
+        curve: const Interval(0.0, 0.22, curve: Curves.easeIn),
+      ),
+    );
+
+    _nodesFadeOut = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.44, 0.54, curve: Curves.easeOut),
+      ),
+    );
+
+    // Fusion pulse ripple
+    _rippleScale = Tween<double>(begin: 0.2, end: 2.4).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.44, 0.76, curve: Curves.easeOutQuad),
+      ),
+    );
+
+    _rippleOpacity = Tween<double>(begin: 0.9, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.44, 0.76, curve: Curves.easeOutQuad),
+      ),
+    );
+
+    // Final Logo reveal
+    _logoScale = Tween<double>(begin: 0.78, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.48, 0.76, curve: Curves.easeOutBack),
+      ),
+    );
+
+    _logoFade = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.48, 0.65, curve: Curves.easeIn),
+      ),
+    );
+
+    _detailsFade = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.66, 0.94, curve: Curves.easeOut),
       ),
     );
 
@@ -398,7 +457,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _initApp() async {
-    final minSplashDelay = Future.delayed(const Duration(milliseconds: 2400));
+    final minSplashDelay = Future.delayed(const Duration(milliseconds: 3200));
     Widget targetScreen = const LoginScreen();
 
     try {
@@ -441,8 +500,12 @@ class _SplashScreenState extends State<SplashScreen>
     }
 
     await minSplashDelay;
+    _proceedTo(targetScreen);
+  }
 
-    if (!mounted) return;
+  void _proceedTo(Widget targetScreen) {
+    if (_navigated || !mounted) return;
+    _navigated = true;
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -465,195 +528,501 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
+  Widget _buildNodeCard({
+    required String title,
+    required String sub,
+    required IconData icon,
+    required Color primaryColor,
+    required Color accentColor,
+  }) {
+    return Container(
+      width: 104,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B).withOpacity(0.85),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: primaryColor.withOpacity(0.55), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.3),
+            blurRadius: 18,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [primaryColor, accentColor],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: primaryColor.withOpacity(0.4),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            sub,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.6),
+              fontWeight: FontWeight.w400,
+              fontSize: 9.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0F172A),
-              Color(0xFF090D16),
-              Color(0xFF030712),
-            ],
+      backgroundColor: const Color(0xFF030712),
+      body: GestureDetector(
+        onTap: () {
+          _proceedTo(const LoginScreen());
+        },
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF0F172A),
+                Color(0xFF090D16),
+                Color(0xFF030712),
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              const Spacer(flex: 2),
+          child: SafeArea(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                final double currentProgress = _controller.value;
+                final bool showPreFusion = currentProgress < 0.54;
 
-              // Animated Logo & Ambient Glow
-              AnimatedBuilder(
-                animation: _controller,
-                builder: (context, child) {
-                  return FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Transform.scale(
-                      scale: _scaleAnimation.value,
+                return Column(
+                  children: [
+                    const SizedBox(height: 20),
+
+                    // Top Brand Network Pill
+                    Opacity(
+                      opacity: (_nodesFadeIn.value * 0.9).clamp(0.0, 1.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.12),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: WovzoColors.orange,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'BRAND & CREATOR COLLABORATION PLATFORM',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const Spacer(flex: 2),
+
+                    // Center Interactive Collab Fusion Stage
+                    SizedBox(
+                      height: 250,
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          Container(
-                            width: 170,
-                            height: 170,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: RadialGradient(
-                                colors: [
-                                  WovzoColors.orange.withOpacity(0.28),
-                                  WovzoColors.orange.withOpacity(0.08),
-                                  Colors.transparent,
-                                ],
-                                stops: const [0.0, 0.5, 1.0],
-                              ),
-                            ),
-                          ),
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Image.asset(
-                                'assets/images/wovzo_logo_white.png',
-                                height: 74,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const WovzoLogo(
-                                    isDark: true,
-                                    fontSize: 48,
-                                    height: 74,
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 14),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 5,
-                                ),
+                          // 1. Fusion Ripple Waves when they meet
+                          if (currentProgress >= 0.44 && _rippleOpacity.value > 0.01)
+                            Transform.scale(
+                              scale: _rippleScale.value,
+                              child: Container(
+                                width: 140,
+                                height: 140,
                                 decoration: BoxDecoration(
-                                  color: WovzoColors.orange.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(20),
+                                  shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: WovzoColors.orange.withOpacity(0.4),
-                                    width: 1,
+                                    color: WovzoColors.orange.withOpacity(_rippleOpacity.value),
+                                    width: 3,
                                   ),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.handshake_rounded,
-                                      size: 14,
-                                      color: WovzoColors.orange,
-                                    ),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      'COLLAB',
-                                      style: TextStyle(
-                                        color: WovzoColors.orange,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 2.0,
-                                      ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: WovzoColors.orange.withOpacity(_rippleOpacity.value * 0.5),
+                                      blurRadius: 30,
+                                      spreadRadius: 8,
                                     ),
                                   ],
                                 ),
                               ),
+                            ),
+
+                          // 2. Pre-fusion: Brand & Creator glided together with Handshake
+                          if (showPreFusion)
+                            Opacity(
+                              opacity: (_nodesFadeIn.value * _nodesFadeOut.value).clamp(0.0, 1.0),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Glowing connector beam
+                                  Container(
+                                    width: 220,
+                                    height: 3,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          const Color(0xFF38BDF8).withOpacity(0.8),
+                                          WovzoColors.orange,
+                                          const Color(0xFFFF8A00).withOpacity(0.8),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: WovzoColors.orange.withOpacity(0.6),
+                                          blurRadius: 10,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Central Handshake Node
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: const Color(0xFF0F172A),
+                                      border: Border.all(
+                                        color: WovzoColors.orange,
+                                        width: 2,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: WovzoColors.orange.withOpacity(0.5),
+                                          blurRadius: 12,
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.handshake_rounded,
+                                      color: WovzoColors.orange,
+                                      size: 20,
+                                    ),
+                                  ),
+
+                                  // Brand Card (glides from left to center)
+                                  Transform.translate(
+                                    offset: Offset(_brandSlide.value, 0),
+                                    child: _buildNodeCard(
+                                      title: 'BRAND',
+                                      sub: 'Campaigns & Deals',
+                                      icon: Icons.campaign_rounded,
+                                      primaryColor: const Color(0xFF38BDF8),
+                                      accentColor: const Color(0xFF2563EB),
+                                    ),
+                                  ),
+
+                                  // Creator Card (glides from right to center)
+                                  Transform.translate(
+                                    offset: Offset(_creatorSlide.value, 0),
+                                    child: _buildNodeCard(
+                                      title: 'INFLUENCER',
+                                      sub: 'Content & Reach',
+                                      icon: Icons.auto_awesome,
+                                      primaryColor: WovzoColors.orange,
+                                      accentColor: const Color(0xFFFF3D00),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          // 3. Post-fusion: Unified Wovzo Collab Masterpiece
+                          if (currentProgress >= 0.46)
+                            Opacity(
+                              opacity: _logoFade.value,
+                              child: Transform.scale(
+                                scale: _logoScale.value,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    // Ambient radial warm glow
+                                    Container(
+                                      width: 190,
+                                      height: 190,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: RadialGradient(
+                                          colors: [
+                                            WovzoColors.orange.withOpacity(0.32),
+                                            WovzoColors.orange.withOpacity(0.08),
+                                            Colors.transparent,
+                                          ],
+                                          stops: const [0.0, 0.55, 1.0],
+                                        ),
+                                      ),
+                                    ),
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Image.asset(
+                                          'assets/images/wovzo_logo_white.png',
+                                          height: 74,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return const WovzoLogo(
+                                              isDark: true,
+                                              fontSize: 48,
+                                              height: 74,
+                                            );
+                                          },
+                                        ),
+                                        const SizedBox(height: 14),
+
+                                        // Collab unified pill
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                const Color(0xFF38BDF8).withOpacity(0.18),
+                                                WovzoColors.orange.withOpacity(0.22),
+                                              ],
+                                            ),
+                                            borderRadius: BorderRadius.circular(30),
+                                            border: Border.all(
+                                              color: WovzoColors.orange.withOpacity(0.55),
+                                              width: 1.2,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: WovzoColors.orange.withOpacity(0.2),
+                                                blurRadius: 10,
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.business_rounded,
+                                                size: 13,
+                                                color: Color(0xFF38BDF8),
+                                              ),
+                                              SizedBox(width: 5),
+                                              Text(
+                                                'BRANDS',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 1.2,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                                child: Icon(
+                                                  Icons.handshake_rounded,
+                                                  size: 14,
+                                                  color: WovzoColors.orange,
+                                                ),
+                                              ),
+                                              Text(
+                                                'INFLUENCERS',
+                                                style: TextStyle(
+                                                  color: WovzoColors.orange,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 1.2,
+                                                ),
+                                              ),
+                                              SizedBox(width: 5),
+                                              Icon(
+                                                Icons.auto_awesome,
+                                                size: 13,
+                                                color: WovzoColors.orange,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    const Spacer(flex: 1),
+
+                    // Details, Taglines & Badges
+                    FadeTransition(
+                      opacity: _detailsFade,
+                      child: Column(
+                        children: [
+                          const Text(
+                            'Connecting Brands with Top Creators',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Direct Collabs • Escrow Protection • Verified Metrics',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // 3 Feature chips
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildPillChip(Icons.security_rounded, 'Escrow Safe'),
+                              const SizedBox(width: 8),
+                              _buildPillChip(Icons.flash_on_rounded, 'Direct Deals'),
+                              const SizedBox(width: 8),
+                              _buildPillChip(Icons.verified_rounded, 'Blue Badge'),
                             ],
                           ),
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
 
-              const SizedBox(height: 28),
+                    const Spacer(flex: 2),
 
-              FadeTransition(
-                opacity: _taglineFadeAnimation,
-                child: Column(
-                  children: [
-                    const Text(
-                      'Creator & Brand Partnerships',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Direct deals • Escrow payments • Verified metrics',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.55),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Spacer(flex: 2),
-
-              SizedBox(
-                width: 26,
-                height: 26,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    WovzoColors.orange.withOpacity(0.85),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 36),
-
-              FadeTransition(
-                opacity: _taglineFadeAnimation,
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.verified_user_rounded,
-                          size: 13,
-                          color: Colors.white.withOpacity(0.4),
+                    // Minimal animated loader
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          WovzoColors.orange.withOpacity(0.85),
                         ),
-                        const SizedBox(width: 5),
-                        Text(
-                          '100% Escrow Protected • Instagram Verified',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.4),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Footer
+                    FadeTransition(
+                      opacity: _detailsFade,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.lock_rounded,
+                            size: 11,
+                            color: Colors.white.withOpacity(0.35),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'v1.0.0 • Powered by Wovzo',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.25),
-                        fontSize: 10,
-                        letterSpacing: 0.5,
+                          const SizedBox(width: 4),
+                          Text(
+                            'Wovzo Collab v1.0 • Tap anywhere to skip',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.35),
+                              fontSize: 10.5,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 16),
                   ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                );
+              },
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPillChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: WovzoColors.orange),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.75),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
