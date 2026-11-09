@@ -345,7 +345,9 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  late final Animation<double> _slideAnimation;
   late final Animation<double> _fadeAnimation;
+  late final Animation<double> _pulseAnimation;
   bool _navigated = false;
 
   @override
@@ -362,12 +364,28 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 1200),
     );
 
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeIn,
+    _slideAnimation = Tween<double>(begin: 36.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeIn),
+      ),
+    );
+
+    _pulseAnimation = Tween<double>(begin: 0.88, end: 1.08).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.4, 1.0, curve: Curves.elasticOut),
+      ),
     );
 
     _controller.forward();
@@ -381,7 +399,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _initApp() async {
-    final minSplashDelay = Future.delayed(const Duration(milliseconds: 2000));
+    final minSplashDelay = Future.delayed(const Duration(milliseconds: 2200));
     Widget targetScreen = const LoginScreen();
 
     try {
@@ -471,109 +489,238 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ),
         child: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Column(
-              children: [
-                const Spacer(flex: 3),
-
-                // Center: Wovzo Logo with subtle ambient glow
-                Stack(
-                  alignment: Alignment.center,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return FadeTransition(
+                opacity: _fadeAnimation,
+                child: Column(
                   children: [
-                    Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            WovzoColors.orange.withOpacity(0.20),
-                            Colors.transparent,
-                          ],
+                    const Spacer(flex: 3),
+
+                    // Main Hero: Brand & Influencer Joining Together
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Left: BRAND (Glides inward)
+                        Transform.translate(
+                          offset: Offset(-_slideAnimation.value, 0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 74,
+                                height: 74,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF1D4ED8), Color(0xFF38BDF8)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF38BDF8).withOpacity(0.35),
+                                      blurRadius: 18,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.business_rounded,
+                                  color: Colors.white,
+                                  size: 34,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                'BRAND',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Center: Joining Bridge & Handshake (Pulses as they connect)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Transform.scale(
+                                scale: _pulseAnimation.value,
+                                child: Container(
+                                  width: 46,
+                                  height: 46,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFF1E293B),
+                                    border: Border.all(
+                                      color: WovzoColors.orange,
+                                      width: 2.2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: WovzoColors.orange.withOpacity(0.5),
+                                        blurRadius: 16,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.handshake_rounded,
+                                    color: WovzoColors.orange,
+                                    size: 24,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: WovzoColors.orange.withOpacity(0.18),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: WovzoColors.orange.withOpacity(0.4),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'JOIN',
+                                  style: TextStyle(
+                                    color: WovzoColors.orange,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 10,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Right: INFLUENCER (Glides inward)
+                        Transform.translate(
+                          offset: Offset(_slideAnimation.value, 0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 74,
+                                height: 74,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFFF6A00), Color(0xFFFF9500)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: WovzoColors.orange.withOpacity(0.38),
+                                      blurRadius: 18,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.auto_awesome_rounded,
+                                  color: Colors.white,
+                                  size: 34,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                'INFLUENCER',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Wovzo Collab Wordmark
+                    RichText(
+                      text: const TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'WOVZO ',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'COLLAB',
+                            style: TextStyle(
+                              color: WovzoColors.orange,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Clean Subtitle
+                    Text(
+                      'Brand & Influencer Collaboration',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.65),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+
+                    const Spacer(flex: 3),
+
+                    // Minimal Clean Loader
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          WovzoColors.orange.withOpacity(0.85),
                         ),
                       ),
                     ),
-                    Image.asset(
-                      'assets/images/wovzo_logo_white.png',
-                      height: 72,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const WovzoLogo(
-                          isDark: true,
-                          fontSize: 48,
-                          height: 72,
-                        );
-                      },
+
+                    const SizedBox(height: 32),
+
+                    // Version Footer
+                    Text(
+                      'v1.0.0 • Powered by Wovzo',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.3),
+                        fontSize: 10.5,
+                        letterSpacing: 0.5,
+                      ),
                     ),
+                    const SizedBox(height: 16),
                   ],
                 ),
-
-                const SizedBox(height: 16),
-
-                // Simple & Neat Pill: "COLLAB"
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: WovzoColors.orange.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: WovzoColors.orange.withOpacity(0.4),
-                      width: 1,
-                    ),
-                  ),
-                  child: const Text(
-                    'COLLAB',
-                    style: TextStyle(
-                      color: WovzoColors.orange,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2.5,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-
-                // Clean Subtitle
-                Text(
-                  'Brand & Influencer Collaboration',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-
-                const Spacer(flex: 3),
-
-                // Clean Minimal Loader
-                SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      WovzoColors.orange.withOpacity(0.85),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Bottom Footer
-                Text(
-                  'v1.0.0 • Powered by Wovzo',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.3),
-                    fontSize: 10.5,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
