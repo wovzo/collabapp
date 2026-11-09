@@ -330,7 +330,331 @@ class WovzoCollabApp extends StatelessWidget {
           }),
         ),
       ),
-      home: const LoginScreen(),
+      home: const SplashScreen(),
+    );
+  }
+}
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _taglineFadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFF030712),
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.82, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.7, curve: Curves.easeOutBack),
+      ),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
+      ),
+    );
+
+    _taglineFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
+    _controller.forward();
+    _initApp();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initApp() async {
+    final minSplashDelay = Future.delayed(const Duration(milliseconds: 2400));
+    Widget targetScreen = const LoginScreen();
+
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      final user = Supabase.instance.client.auth.currentUser;
+
+      if (session != null && user != null) {
+        String role = 'influencer';
+        try {
+          final profile = await Supabase.instance.client
+              .from('profiles')
+              .select('role')
+              .eq('id', user.id)
+              .maybeSingle()
+              .timeout(const Duration(seconds: 3));
+          if (profile != null && profile['role'] != null) {
+            role = profile['role'].toString().toLowerCase();
+          } else if (user.userMetadata?['role'] != null) {
+            role = user.userMetadata!['role'].toString().toLowerCase();
+          }
+        } catch (_) {
+          if (user.userMetadata?['role'] != null) {
+            role = user.userMetadata!['role'].toString().toLowerCase();
+          }
+        }
+
+        final cleanEmail = user.email ?? 'asrafgiimi@gmail.com';
+        _activeSessionEmail = cleanEmail;
+        resetWovzoUserSession();
+
+        if (role == 'brand') {
+          targetScreen = const BrandMainScreen();
+        } else {
+          targetScreen = const InfluencerMainScreen();
+        }
+      }
+    } catch (e) {
+      debugPrint('Splash auth error: $e');
+      targetScreen = const LoginScreen();
+    }
+
+    await minSplashDelay;
+
+    if (!mounted) return;
+
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+    );
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => targetScreen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 500),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0F172A),
+              Color(0xFF090D16),
+              Color(0xFF030712),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const Spacer(flex: 2),
+
+              // Animated Logo & Ambient Glow
+              AnimatedBuilder(
+                animation: _controller,
+                builder: (context, child) {
+                  return FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Transform.scale(
+                      scale: _scaleAnimation.value,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 170,
+                            height: 170,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  WovzoColors.orange.withOpacity(0.28),
+                                  WovzoColors.orange.withOpacity(0.08),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0.0, 0.5, 1.0],
+                              ),
+                            ),
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Image.asset(
+                                'assets/images/wovzo_logo_white.png',
+                                height: 74,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const WovzoLogo(
+                                    isDark: true,
+                                    fontSize: 48,
+                                    height: 74,
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 14),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: WovzoColors.orange.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: WovzoColors.orange.withOpacity(0.4),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.handshake_rounded,
+                                      size: 14,
+                                      color: WovzoColors.orange,
+                                    ),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'COLLAB',
+                                      style: TextStyle(
+                                        color: WovzoColors.orange,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 2.0,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 28),
+
+              FadeTransition(
+                opacity: _taglineFadeAnimation,
+                child: Column(
+                  children: [
+                    const Text(
+                      'Creator & Brand Partnerships',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Direct deals • Escrow payments • Verified metrics',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Spacer(flex: 2),
+
+              SizedBox(
+                width: 26,
+                height: 26,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    WovzoColors.orange.withOpacity(0.85),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 36),
+
+              FadeTransition(
+                opacity: _taglineFadeAnimation,
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.verified_user_rounded,
+                          size: 13,
+                          color: Colors.white.withOpacity(0.4),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '100% Escrow Protected • Instagram Verified',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.4),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'v1.0.0 • Powered by Wovzo',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.25),
+                        fontSize: 10,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
