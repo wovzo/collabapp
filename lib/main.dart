@@ -240,6 +240,66 @@ class WovzoColors {
   static const Color greyLight = Color(0xFFF8FAFC);
 }
 
+class WovzoGlyphPainter extends CustomPainter {
+  final Color leftWingColor;
+  final Color rightWingColor;
+  final Color centerColor;
+
+  const WovzoGlyphPainter({
+    this.leftWingColor = const Color(0xFFFF6A00),
+    this.rightWingColor = Colors.white,
+    this.centerColor = const Color(0xFFFF8A00),
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.width / 512.0;
+    canvas.save();
+    canvas.scale(scale, scale);
+
+    // Left Wing (Creator)
+    final leftPath = Path()
+      ..moveTo(124, 172)
+      ..lineTo(204, 344)
+      ..cubicTo(214, 364, 240, 366, 252, 346)
+      ..lineTo(302, 260)
+      ..lineTo(274, 214)
+      ..lineTo(234, 284)
+      ..lineTo(182, 172)
+      ..close();
+    final leftPaint = Paint()..color = leftWingColor..style = PaintingStyle.fill;
+    canvas.drawPath(leftPath, leftPaint);
+
+    // Right Wing (Brand)
+    final rightPath = Path()
+      ..moveTo(388, 172)
+      ..lineTo(308, 344)
+      ..cubicTo(298, 364, 272, 366, 260, 346)
+      ..lineTo(210, 260)
+      ..lineTo(238, 214)
+      ..lineTo(278, 284)
+      ..lineTo(330, 172)
+      ..close();
+    final rightPaint = Paint()..color = rightWingColor..style = PaintingStyle.fill;
+    canvas.drawPath(rightPath, rightPaint);
+
+    // Center Diamond (Collab Nexus)
+    final diamondPath = Path()
+      ..moveTo(256, 242)
+      ..lineTo(274, 270)
+      ..lineTo(256, 298)
+      ..lineTo(238, 270)
+      ..close();
+    final diamondPaint = Paint()..color = centerColor..style = PaintingStyle.fill;
+    canvas.drawPath(diamondPath, diamondPaint);
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class WovzoLogo extends StatelessWidget {
   final double? height;
   final double fontSize;
@@ -249,46 +309,85 @@ class WovzoLogo extends StatelessWidget {
   const WovzoLogo({
     super.key,
     this.height,
-    this.fontSize = 32,
+    this.fontSize = 20,
     this.showBadge = false,
     this.isDark = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final logoHeight = height ?? (fontSize * 1.2);
-    return Image.asset(
-      isDark ? 'assets/images/wovzo_logo_white.png' : 'assets/images/wovzo_logo.png',
-      height: logoHeight,
-      fit: BoxFit.contain,
-      errorBuilder: (context, error, stackTrace) {
-        return RichText(
+    final h = height ?? (fontSize * 1.4);
+    if (showBadge) {
+      return Container(
+        width: h,
+        height: h,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(h * 0.28),
+          border: Border.all(
+            color: WovzoColors.orange.withOpacity(0.35),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: WovzoColors.orange.withOpacity(0.25),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        padding: EdgeInsets.all(h * 0.18),
+        child: const CustomPaint(
+          painter: WovzoGlyphPainter(
+            leftWingColor: Color(0xFFFF6A00),
+            rightWingColor: Colors.white,
+            centerColor: Color(0xFFFF8A00),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: h,
+          height: h,
+          child: CustomPaint(
+            painter: WovzoGlyphPainter(
+              leftWingColor: const Color(0xFFFF6A00),
+              rightWingColor: isDark ? Colors.white : const Color(0xFF0F172A),
+              centerColor: const Color(0xFFFF8A00),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        RichText(
           text: TextSpan(
             children: [
               TextSpan(
-                text: 'WOV',
+                text: 'WOVZO ',
                 style: TextStyle(
-                  color: isDark ? Colors.white : WovzoColors.deepBlack,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
                   fontWeight: FontWeight.w900,
                   fontSize: fontSize,
-                  letterSpacing: -1.0,
-                  fontFamily: 'Roboto',
+                  letterSpacing: 1.2,
                 ),
               ),
               TextSpan(
-                text: 'ZO',
+                text: 'COLLAB',
                 style: TextStyle(
                   color: WovzoColors.orange,
                   fontWeight: FontWeight.w900,
                   fontSize: fontSize,
-                  letterSpacing: -1.0,
-                  fontFamily: 'Roboto',
+                  letterSpacing: 1.2,
                 ),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -1518,6 +1617,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _signInWithGoogle() {
     final normSelected = (_selectedRole.toLowerCase() == 'creator' || _selectedRole.toLowerCase() == 'influencer') ? 'influencer' : 'brand';
     final targetName = normSelected == 'brand' ? 'Brand' : 'Creator';
+    final enteredEmail = _emailController.text.trim().toLowerCase();
 
     showModalBottomSheet(
       context: context,
@@ -1538,10 +1638,30 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 6),
             Text('Continue to Wovzo Collab as $targetName', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
             const SizedBox(height: 16),
+            if (enteredEmail.isNotEmpty && enteredEmail != 'asrafgiimi@gmail.com') ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: WovzoColors.orange,
+                  child: Text(
+                    enteredEmail.substring(0, enteredEmail.length >= 2 ? 2 : 1).toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                title: Text(enteredEmail.split('@')[0], style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(enteredEmail),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _completeGoogleSignIn(enteredEmail, enteredEmail.split('@')[0], normSelected);
+                },
+              ),
+              const Divider(),
+            ],
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const CircleAvatar(
-                backgroundColor: WovzoColors.orange,
+                backgroundColor: Color(0xFF1E293B),
                 child: Text('AG', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
               title: const Text('Asraf Giimi', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1578,295 +1698,677 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Center(
-                child: WovzoLogo(height: 50),
-              ),
-              const SizedBox(height: 32),
-              Text(
-                _isLogin ? 'Welcome Back' : 'Create Account',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: WovzoColors.deepBlack),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _isLogin ? 'Sign in to find your next collaboration' : 'Sign up to apply for campaigns',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 32),
-              
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.red[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // === TOP LUXURY BRANDING ===
+                Center(
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: WovzoColors.orange.withOpacity(0.4),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: WovzoColors.orange.withOpacity(0.25),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(14),
+                    child: const CustomPaint(
+                      painter: WovzoGlyphPainter(
+                        leftWingColor: Color(0xFFFF6A00),
+                        rightWingColor: Colors.white,
+                        centerColor: Color(0xFFFF8A00),
+                      ),
+                    ),
                   ),
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(color: Colors.red[800], fontSize: 14),
+                ),
+                const SizedBox(height: 14),
+
+                RichText(
+                  textAlign: TextAlign.center,
+                  text: const TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'WOVZO ',
+                        style: TextStyle(
+                          color: WovzoColors.deepBlack,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 24,
+                          letterSpacing: 2.2,
+                        ),
+                      ),
+                      TextSpan(
+                        text: 'COLLAB',
+                        style: TextStyle(
+                          color: WovzoColors.orange,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 24,
+                          letterSpacing: 2.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7ED),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFEDD5)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: WovzoColors.orange,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _isLogin ? 'Sign in to find your collaborations' : 'Sign up to apply or post campaigns',
+                          style: const TextStyle(
+                            color: Color(0xFF9A3412),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // === TOP TAB SWITCHER: SIGN IN vs CREATE ACCOUNT ===
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _isLogin = true;
+                              _errorMessage = null;
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _isLogin ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(11),
+                              boxShadow: _isLogin
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Sign In',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: _isLogin ? WovzoColors.deepBlack : Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _isLogin = false;
+                              _errorMessage = null;
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: !_isLogin ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(11),
+                              boxShadow: !_isLogin
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.08),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Create Account',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: !_isLogin ? WovzoColors.orange : Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // === ERROR BANNER WITH AUTO-SIGNUP BUTTON ===
+                if (_errorMessage != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF1F2),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFFECDD3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Color(0xFFE11D48), size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(
+                                  color: Color(0xFF9F1239),
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_errorMessage!.contains('Sign Up first') || _errorMessage!.contains('No account found')) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _isLogin = false;
+                                  _errorMessage = null;
+                                });
+                              },
+                              icon: const Icon(Icons.person_add_rounded, size: 16),
+                              label: Text(
+                                _emailController.text.trim().isNotEmpty
+                                    ? 'Sign Up now with ${_emailController.text.trim()}'
+                                    : 'Sign Up to create account',
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: WovzoColors.orange,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+
+                // === CREATOR VS BRAND ROLE CARDS ===
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() {
+                          _selectedRole = 'influencer';
+                          _errorMessage = null;
+                        }),
+                        borderRadius: BorderRadius.circular(14),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _selectedRole == 'influencer' ? const Color(0xFFFFF7ED) : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _selectedRole == 'influencer' ? WovzoColors.orange : const Color(0xFFE2E8F0),
+                              width: _selectedRole == 'influencer' ? 1.8 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 16,
+                                color: _selectedRole == 'influencer' ? WovzoColors.orange : Colors.grey.shade500,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Creator',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  color: _selectedRole == 'influencer' ? WovzoColors.orange : Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() {
+                          _selectedRole = 'brand';
+                          _errorMessage = null;
+                        }),
+                        borderRadius: BorderRadius.circular(14),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _selectedRole == 'brand' ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                              width: _selectedRole == 'brand' ? 1.8 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.business_rounded,
+                                size: 16,
+                                color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : Colors.grey.shade500,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Brand',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // === EXTRA SIGN UP FIELDS ===
+                if (!_isLogin) ...[
+                  if (_selectedRole == 'brand') ...[
+                    TextField(
+                      controller: _brandNameController,
+                      decoration: InputDecoration(
+                        labelText: 'Brand / Company Name',
+                        hintText: 'e.g. FabIndia, boAt Lifestyle',
+                        prefixIcon: const Icon(Icons.business_outlined, color: Color(0xFF2563EB)),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Your Full Name (Brand Manager / Founder)',
+                        hintText: 'e.g. Rahul Sharma',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ] else ...[
+                    TextField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Full Name',
+                        hintText: 'e.g. Asraf Ali',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                ],
+
+                // === EMAIL FIELD ===
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email Address',
+                    hintText: 'user@example.com',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // === PASSWORD FIELD ===
+                TextField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
+                    ),
                   ),
                 ),
 
-              SegmentedButton<String>(
-                  style: ButtonStyle(
-                    backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-                      if (states.contains(WidgetState.selected)) {
-                        return WovzoColors.orangeLight;
-                      }
-                      return null;
-                    }),
-                    foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
-                      if (states.contains(WidgetState.selected)) {
-                        return WovzoColors.orange;
-                      }
-                      return WovzoColors.deepBlack;
-                    }),
-                    side: WidgetStateProperty.all(const BorderSide(color: Color(0xFFE2E8F0))),
+                if (_isLogin)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _resetPassword,
+                      style: TextButton.styleFrom(foregroundColor: WovzoColors.orange),
+                      child: const Text('Forgot Password?', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    ),
+                  )
+                else if (_selectedRole == 'influencer') ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7ED),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFFFEDD5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.verified_user_outlined, size: 16, color: WovzoColors.orange),
+                            SizedBox(width: 6),
+                            Text(
+                              'Social Channels & Bio Verification',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: WovzoColors.orange),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Provide your handles. You will get a 2-minute Bio Code (WOVZO-XXXX) to earn the Verified Blue Badge!',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                        ),
+                      ],
+                    ),
                   ),
-                  segments: const [
-                    ButtonSegment(value: 'influencer', label: Text('Creator', style: TextStyle(fontWeight: FontWeight.w600))),
-                    ButtonSegment(value: 'brand', label: Text('Brand', style: TextStyle(fontWeight: FontWeight.w600))),
-                  ],
-                  selected: {_selectedRole},
-                  onSelectionChanged: (Set<String> newSelection) {
-                    setState(() {
-                      _selectedRole = newSelection.first;
-                      _errorMessage = null;
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-              if (!_isLogin) ...[
-                if (_selectedRole == 'brand') ...[
+                  const SizedBox(height: 12),
                   TextField(
-                    controller: _brandNameController,
+                    controller: _instagramController,
                     decoration: InputDecoration(
-                      labelText: 'Brand / Company Name',
-                      hintText: 'e.g. FabIndia, boAt Lifestyle',
-                      prefixIcon: const Icon(Icons.business_outlined),
+                      labelText: 'Instagram Handle (@username)',
+                      prefixIcon: const Icon(Icons.camera_alt_outlined, color: Colors.pink),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   TextField(
-                    controller: _nameController,
+                    controller: _youtubeController,
                     decoration: InputDecoration(
-                      labelText: 'Your Full Name (Brand Manager / Founder)',
-                      hintText: 'e.g. Rahul Sharma',
-                      prefixIcon: const Icon(Icons.person_outline),
+                      labelText: 'YouTube Channel / Link (Optional)',
+                      prefixIcon: const Icon(Icons.play_circle_outline, color: Colors.red),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                ] else ...[
-                  TextField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      labelText: 'Full Name',
-                      hintText: 'e.g. Asraf Ali',
-                      prefixIcon: const Icon(Icons.person_outline),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ],
-              
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: const Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                      color: Colors.grey,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              if (_isLogin)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: _isLoading ? null : _resetPassword,
-                    style: TextButton.styleFrom(foregroundColor: WovzoColors.orange),
-                    child: const Text('Forgot Password?'),
-                  ),
-                )
-              else if (_selectedRole == 'influencer') ...[
-                const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+                ] else
+                  const SizedBox(height: 14),
+
+                if (_isLogin) const SizedBox(height: 8),
+
+                // === PRIMARY SIGN IN / SIGN UP BUTTON ===
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  height: 52,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF7ED),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFFEDD5)),
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF6A00), Color(0xFFFF8500)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: WovzoColors.orange.withOpacity(0.38),
+                        blurRadius: 16,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.verified_user_outlined, size: 16, color: WovzoColors.orange),
-                          SizedBox(width: 6),
-                          Text(
-                            'Social Channels & Bio Verification',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: WovzoColors.orange),
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _submitAuth,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                          )
+                        : Text(
+                            _isLogin ? 'Sign In' : 'Create Account',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.5),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Provide your handles. You will get a 2-minute Bio Code (WOVZO-XXXX) to earn the Verified Blue Badge!',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                      ),
-                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _instagramController,
-                  decoration: InputDecoration(
-                    labelText: 'Instagram Handle (@username)',
-                    prefixIcon: const Icon(Icons.camera_alt_outlined, color: Colors.pink),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 18),
+
+                // === DIVIDER ===
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Colors.grey.shade300)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('OR', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                    Expanded(child: Divider(color: Colors.grey.shade300)),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // === GOOGLE BUTTON ===
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton(
+                    onPressed: _signInWithGoogle,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      backgroundColor: Colors.white,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildGoogleIcon(),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Continue with Google',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B), fontSize: 14.5),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _youtubeController,
-                  decoration: InputDecoration(
-                    labelText: 'YouTube Channel / Link (Optional)',
-                    prefixIcon: const Icon(Icons.play_circle_outline, color: Colors.red),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 22),
+
+                // === FOOTER SWITCH ===
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _isLogin ? "Don't have an account?" : "Already have an account?",
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13.5),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ] else
-                const SizedBox(height: 16),
-              if (_isLogin) const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submitAuth,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: WovzoColors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: _isLoading 
-                    ? const SizedBox(
-                        height: 20, width: 20, 
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                      )
-                    : Text(
-                        _isLogin ? 'Sign In' : 'Sign Up',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _isLogin = !_isLogin;
+                          _errorMessage = null;
+                        });
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: WovzoColors.orange,
+                        textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
                       ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(child: Divider(color: Colors.grey.shade300)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('OR', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w600)),
-                  ),
-                  Expanded(child: Divider(color: Colors.grey.shade300)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: _signInWithGoogle,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    backgroundColor: Colors.white,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildGoogleIcon(),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'Continue with Google',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B), fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _isLogin ? 'Don\'t have an account?' : 'Already have an account?', 
-                    style: TextStyle(color: Colors.grey[600])
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _isLogin = !_isLogin;
-                        _errorMessage = null;
-                      });
-                    },
-                    style: TextButton.styleFrom(
-                      foregroundColor: WovzoColors.orange,
-                      textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                      child: Text(_isLogin ? 'Sign Up' : 'Sign In'),
                     ),
-                    child: Text(_isLogin ? 'Sign Up' : 'Sign In'),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
