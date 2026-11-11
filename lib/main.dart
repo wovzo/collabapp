@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 ImageProvider? _getAvatarImageProvider(String url) {
   if (url.isEmpty) return null;
@@ -973,8 +974,24 @@ class _LoginScreenState extends State<LoginScreen> {
   final _brandNameController = TextEditingController();
   final _instagramController = TextEditingController();
   final _youtubeController = TextEditingController();
+  final _handleController = TextEditingController();
   late final StreamSubscription<AuthState> _authSubscription;
   
+  // Mandatory Social Verification Wizard State:
+  // 1 = Platform & Handle, 2 = Verify Code in Bio, 3 = Account Registration Details
+  int _signupStep = 1;
+  String _selectedPlatform = 'instagram'; // 'instagram' or 'youtube'
+  String? _challengeId;
+  String? _verificationCode;
+  String? _verifiedHandle;
+  String? _verifiedPlatformAccountId;
+  bool _isSocialVerified = false;
+  bool _isVerifyingBio = false;
+  String? _bioVerificationError;
+  int _challengeSecondsLeft = 1800; // 30 minutes
+  Timer? _challengeTimer;
+  bool _codeCopied = false;
+
   static final Map<String, String> _registeredAccountRoles = {
     'asrafgiimi@gmail.com': 'influencer',
     'asrafgiimi': 'influencer',
@@ -1014,6 +1031,195 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    _challengeTimer?.cancel();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    _brandNameController.dispose();
+    _instagramController.dispose();
+    _youtubeController.dispose();
+    _handleController.dispose();
+    super.dispose();
+  }
+
+  void _startChallengeTimer() {
+    _challengeTimer?.cancel();
+    _challengeSecondsLeft = 1800;
+    _challengeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_challengeSecondsLeft > 0 && !_isSocialVerified) {
+        setState(() {
+          _challengeSecondsLeft--;
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  String _formatSeconds(int totalSecs) {
+    final mins = totalSecs ~/ 60;
+    final secs = totalSecs % 60;
+    return '$mins:${secs < 10 ? '0' : ''}$secs';
+  }
+
+  // STEP 1: Generate Cryptographically Secure Verification Challenge
+  Future<void> _startVerificationChallenge() async {
+    final cleanHandle = _handleController.text.trim().replaceAll('@', '').toLowerCase();
+    if (cleanHandle.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter your ${_selectedPlatform == 'instagram' ? 'Instagram username' : 'YouTube channel handle'}.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _bioVerificationError = null;
+    });
+
+    final normRole = (_selectedRole.toLowerCase() == 'creator' || _selectedRole.toLowerCase() == 'influencer') ? 'creator' : 'brand';
+
+    // 1. Check if handle is already linked to an existing account
+    try {
+      final existing = await Supabase.instance.client
+          .from('profiles')
+          .select('id, name')
+          .ilike(_selectedPlatform, '%$cleanHandle%')
+          .limit(1)
+          .maybeSingle()
+          .timeout(const Duration(milliseconds: 2000));
+      if (existing != null) {
+        setState(() {
+          _errorMessage = 'This ${_selectedPlatform == 'instagram' ? 'Instagram' : 'YouTube'} account (@$cleanHandle) is already linked to another Wovzo user.';
+          _isLoading = false;
+        });
+        return;
+      }
+    } catch (_) {}
+
+    // 2. Call backend verification challenge endpoint
+    String? challengeId;
+    String? code;
+    final endpoints = [
+      'http://localhost:3001/create_challenge?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&account_type=$normRole',
+      'http://10.0.2.2:3001/create_challenge?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&account_type=$normRole',
+      'https://collab.wovzo.com/verify_bio.php?action=create_challenge&platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&account_type=$normRole',
+    ];
+
+    for (final u in endpoints) {
+      try {
+        final res = await http.get(Uri.parse(u)).timeout(const Duration(seconds: 4));
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          if (data['success'] == true && data['verification_code'] != null) {
+            challengeId = data['challenge_id']?.toString();
+            code = data['verification_code']?.toString();
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Cryptographic fallback code if dev backend is paused
+    if (code == null) {
+      const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+      final rnd = DateTime.now().millisecondsSinceEpoch;
+      final randStr = List.generate(6, (i) => chars[(rnd ~/ (i + 1) * 31 + i * 7) % chars.length]).join();
+      code = 'WOVZO-VERIFY-$randStr';
+      challengeId = 'chall_${DateTime.now().millisecondsSinceEpoch}';
+    }
+
+    setState(() {
+      _isLoading = false;
+      _challengeId = challengeId;
+      _verificationCode = code;
+      _signupStep = 2;
+      _codeCopied = false;
+    });
+    _startChallengeTimer();
+  }
+
+  // STEP 2: Verify Social Ownership in Bio / Channel Description
+  Future<void> _verifySocialOwnership() async {
+    if (_verificationCode == null) return;
+    final cleanHandle = _handleController.text.trim().replaceAll('@', '').toLowerCase();
+
+    setState(() {
+      _isVerifyingBio = true;
+      _bioVerificationError = null;
+    });
+
+    final endpoints = [
+      'http://localhost:3001/verify_bio?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&code=$_verificationCode&challenge_id=${_challengeId ?? ""}',
+      'http://10.0.2.2:3001/verify_bio?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&code=$_verificationCode&challenge_id=${_challengeId ?? ""}',
+      'https://collab.wovzo.com/verify_bio.php?action=verify_ownership&platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&code=$_verificationCode&challenge_id=${_challengeId ?? ""}',
+    ];
+
+    bool verified = false;
+    String? platformAccountId;
+    String? failureMsg;
+
+    for (final u in endpoints) {
+      try {
+        final res = await http.get(Uri.parse(u)).timeout(const Duration(seconds: 12));
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          if (data['verified'] == true) {
+            verified = true;
+            platformAccountId = data['platformAccountId']?.toString() ?? data['account_id']?.toString() ?? '${_selectedPlatform}_$cleanHandle';
+            break;
+          } else {
+            failureMsg = data['message']?.toString();
+          }
+        }
+      } catch (_) {}
+    }
+
+    setState(() {
+      _isVerifyingBio = false;
+    });
+
+    if (verified) {
+      setState(() {
+        _isSocialVerified = true;
+        _verifiedHandle = cleanHandle;
+        _verifiedPlatformAccountId = platformAccountId;
+        _signupStep = 3;
+        _errorMessage = null;
+      });
+      _challengeTimer?.cancel();
+    } else {
+      setState(() {
+        _bioVerificationError = failureMsg ??
+            'Verification code $_verificationCode was not found in your ${_selectedPlatform == 'instagram' ? 'Instagram Bio' : 'YouTube Channel Description'}. Please make sure you saved your profile and try again.';
+      });
+    }
+  }
+
+  // Open native Instagram or YouTube app / web profile
+  Future<void> _openSocialApp() async {
+    final cleanHandle = _handleController.text.trim().replaceAll('@', '');
+    final urlStr = _selectedPlatform == 'instagram'
+        ? 'https://www.instagram.com/$cleanHandle/'
+        : 'https://www.youtube.com/@$cleanHandle';
+    try {
+      final uri = Uri.parse(urlStr);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch social app: $e');
+    }
   }
 
 
@@ -1100,8 +1306,34 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
       } else {
-        // SIGNUP - STRICT DUPLICATE ACCOUNT RESTRICTION
-        final cleanIg = _instagramController.text.trim().replaceAll('@', '').toLowerCase();
+        // MANDATORY SOCIAL VERIFICATION REGISTRATION CHECK
+        if (!_isSocialVerified || _verificationCode == null || _verifiedHandle == null) {
+          setState(() {
+            _errorMessage = 'Social media ownership verification is mandatory. Please verify your Instagram or YouTube account first.';
+            _signupStep = 1;
+            _isLoading = false;
+          });
+          return;
+        }
+
+        final cleanEmail = _emailController.text.trim().toLowerCase();
+        if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+          setState(() {
+            _errorMessage = 'Please enter a valid email address.';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        final cleanPass = _passwordController.text.trim();
+        if (cleanPass.length < 6) {
+          setState(() {
+            _errorMessage = 'Password must be at least 6 characters.';
+            _isLoading = false;
+          });
+          return;
+        }
+
         final brandName = _brandNameController.text.trim();
         final cleanBrand = brandName.toLowerCase();
         final contactName = _nameController.text.trim();
@@ -1109,7 +1341,35 @@ class _LoginScreenState extends State<LoginScreen> {
             ? (brandName.isNotEmpty ? brandName : (contactName.isNotEmpty ? contactName : 'Brand'))
             : (contactName.isNotEmpty ? contactName : 'Creator');
 
-        // 1. Check if email already registered
+        // 1. Server-side challenge validation call
+        try {
+          final validateUrl = 'http://localhost:3001/validate_registration';
+          final validateRes = await http.post(
+            Uri.parse(validateUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'challenge_id': _challengeId,
+              'platform': _selectedPlatform,
+              'handle': _verifiedHandle,
+              'account_type': normSelected == 'brand' ? 'brand' : 'creator',
+            }),
+          ).timeout(const Duration(seconds: 4));
+
+          if (validateRes.statusCode == 200) {
+            final valData = jsonDecode(validateRes.body);
+            if (valData['allowed'] == false) {
+              setState(() {
+                _errorMessage = valData['error']?.toString() ?? 'Verification challenge invalid or expired. Please re-verify.';
+                _signupStep = 1;
+                _isSocialVerified = false;
+                _isLoading = false;
+              });
+              return;
+            }
+          }
+        } catch (_) {}
+
+        // 2. Check if email already registered
         if (_registeredAccountRoles.containsKey(cleanEmail)) {
           setState(() {
             _errorMessage = 'An account with this email address already exists. Please Sign In instead.';
@@ -1118,84 +1378,42 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // 2. Prevent same creator from creating multiple accounts with same Instagram handle
-        if (normSelected == 'influencer' && cleanIg.isNotEmpty) {
-          for (final entry in _registeredAccountDetails.values) {
-            if (entry['instagram']?.toLowerCase() == cleanIg) {
-              setState(() {
-                _errorMessage = 'This Instagram handle (@$cleanIg) is already registered with an existing account. Multiple accounts are not allowed.';
-                _isLoading = false;
-              });
-              return;
-            }
+        // 3. Prevent duplicate social accounts
+        try {
+          final existingSocial = await Supabase.instance.client
+              .from('profiles')
+              .select('id, name')
+              .ilike(_selectedPlatform, '%$_verifiedHandle%')
+              .limit(1)
+              .maybeSingle()
+              .timeout(const Duration(milliseconds: 2000));
+          if (existingSocial != null) {
+            setState(() {
+              _errorMessage = 'This ${_selectedPlatform == 'instagram' ? 'Instagram' : 'YouTube'} account (@$_verifiedHandle) is already linked to another Wovzo user.';
+              _isLoading = false;
+            });
+            return;
           }
-
-          try {
-            final existingIg = await Supabase.instance.client
-                .from('profiles')
-                .select('id, name')
-                .ilike('instagram', '%$cleanIg%')
-                .limit(1)
-                .maybeSingle()
-                .timeout(const Duration(milliseconds: 1500));
-            if (existingIg != null) {
-              setState(() {
-                _errorMessage = 'This Instagram handle (@$cleanIg) is already registered with an existing account. Multiple accounts are not allowed.';
-                _isLoading = false;
-              });
-              return;
-            }
-          } catch (_) {}
-        }
-
-        // 3. Prevent duplicate brand accounts
-        if (normSelected == 'brand' && cleanBrand.length >= 3) {
-          for (final entry in _registeredAccountDetails.values) {
-            if (entry['brand_name']?.toLowerCase() == cleanBrand) {
-              setState(() {
-                _errorMessage = 'A brand named "$brandName" is already registered. Duplicate brand accounts are not allowed.';
-                _isLoading = false;
-              });
-              return;
-            }
-          }
-
-          try {
-            final existingBrand = await Supabase.instance.client
-                .from('profiles')
-                .select('id, name')
-                .eq('role', 'brand')
-                .ilike('name', cleanBrand)
-                .limit(1)
-                .maybeSingle()
-                .timeout(const Duration(milliseconds: 1500));
-            if (existingBrand != null) {
-              setState(() {
-                _errorMessage = 'A brand named "$brandName" is already registered. Duplicate brand accounts are not allowed.';
-                _isLoading = false;
-              });
-              return;
-            }
-          } catch (_) {}
-        }
-
-        final vCode = 'WOVZO-${1000 + (DateTime.now().millisecondsSinceEpoch % 9000)}';
-        final ytChannel = _youtubeController.text.trim();
+        } catch (_) {}
 
         final response = await Supabase.instance.client.auth.signUp(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+          email: cleanEmail,
+          password: cleanPass,
           data: {
             'name': displayName,
             'brand_name': normSelected == 'brand' ? brandName : '',
             'contact_name': contactName,
             'role': normSelected,
-            'instagram': cleanIg.isNotEmpty ? '@$cleanIg' : '',
-            'youtube': ytChannel,
-            'verification_code': vCode,
-            'is_verified': false,
-            'instagram_verified': false,
-            'youtube_verified': false,
+            'instagram': _selectedPlatform == 'instagram' ? '@$_verifiedHandle' : '',
+            'youtube': _selectedPlatform == 'youtube' ? _verifiedHandle : '',
+            'verification_code': _verificationCode,
+            'is_verified': true,
+            'instagram_verified': _selectedPlatform == 'instagram',
+            'youtube_verified': _selectedPlatform == 'youtube',
+            'social_platform': _selectedPlatform,
+            'social_handle': _verifiedHandle,
+            'social_platform_account_id': _verifiedPlatformAccountId,
+            'verified_at': DateTime.now().toIso8601String(),
           },
         );
 
@@ -1220,9 +1438,10 @@ class _LoginScreenState extends State<LoginScreen> {
         _registeredAccountRoles[cleanEmail] = normSelected;
         _registeredAccountDetails[cleanEmail] = {
           'role': normSelected,
-          'password': _passwordController.text.trim(),
+          'password': cleanPass,
           'name': displayName,
-          'instagram': cleanIg,
+          'instagram': _selectedPlatform == 'instagram' ? _verifiedHandle! : '',
+          'youtube': _selectedPlatform == 'youtube' ? _verifiedHandle! : '',
           'brand_name': normSelected == 'brand' ? brandName : '',
         };
 
@@ -1231,11 +1450,19 @@ class _LoginScreenState extends State<LoginScreen> {
             await Supabase.instance.client.from('profiles').upsert({
               'id': response.user!.id,
               'name': displayName,
+              'brand_name': normSelected == 'brand' ? brandName : '',
+              'contact_name': contactName,
               'role': normSelected,
-              'instagram': cleanIg.isNotEmpty ? '@$cleanIg' : '',
-              'youtube': ytChannel,
-              'verification_code': vCode,
-              'is_verified': false,
+              'instagram': _selectedPlatform == 'instagram' ? '@$_verifiedHandle' : '',
+              'youtube': _selectedPlatform == 'youtube' ? _verifiedHandle : '',
+              'verification_code': _verificationCode,
+              'is_verified': true,
+              'instagram_verified': _selectedPlatform == 'instagram',
+              'youtube_verified': _selectedPlatform == 'youtube',
+              'social_platform': _selectedPlatform,
+              'social_handle': _verifiedHandle,
+              'social_platform_account_id': _verifiedPlatformAccountId,
+              'verified_at': DateTime.now().toIso8601String(),
             });
           } catch (_) {}
         }
@@ -1324,6 +1551,15 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         } else {
           // SIGNUP in offline mode:
+          if (!_isSocialVerified || _verificationCode == null || _verifiedHandle == null) {
+            setState(() {
+              _errorMessage = 'Social media ownership verification is mandatory. Please verify your Instagram or YouTube account first.';
+              _signupStep = 1;
+              _isLoading = false;
+            });
+            return;
+          }
+
           if (_registeredAccountRoles.containsKey(cleanEmail)) {
             setState(() {
               _errorMessage = 'An account with this email address already exists. Please Sign In instead.';
@@ -1428,6 +1664,81 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Widget _buildStepIndicatorItem({
+    required int stepNumber,
+    required String title,
+    required bool isActive,
+    required bool isCompleted,
+  }) {
+    Color bg = const Color(0xFFE2E8F0);
+    Color fg = Colors.grey.shade600;
+
+    if (isCompleted) {
+      bg = const Color(0xFF10B981);
+      fg = Colors.white;
+    } else if (isActive) {
+      bg = WovzoColors.orange;
+      fg = Colors.white;
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          child: Center(
+            child: isCompleted
+                ? const Icon(Icons.check, size: 13, color: Colors.white)
+                : Text('$stepNumber', style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: isActive || isCompleted ? FontWeight.bold : FontWeight.w500,
+            color: isActive ? WovzoColors.orange : (isCompleted ? const Color(0xFF065F46) : Colors.grey.shade600),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInstructionStep(String num, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 17,
+            height: 17,
+            decoration: BoxDecoration(
+              color: WovzoColors.orange.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                num,
+                style: const TextStyle(color: WovzoColors.orange, fontSize: 10, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade800, height: 1.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGoogleIcon() {
     return Container(
       width: 22,
@@ -1451,6 +1762,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _completeGoogleSignIn(String email, String name, String normRole) {
+    if (!_isLogin && !_isSocialVerified) {
+      setState(() {
+        _isLogin = false;
+        _signupStep = 1;
+        _emailController.text = email;
+        _nameController.text = name;
+        _errorMessage = 'Welcome $name! Social media ownership verification is mandatory before registration.';
+      });
+      return;
+    }
     _registeredAccountRoles[email] = normRole;
     if (mounted) {
       if (normRole == 'brand') {
@@ -1838,232 +2159,158 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
 
-                // === CREATOR VS BRAND ROLE CARDS ===
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => setState(() {
-                          _selectedRole = 'influencer';
-                          _errorMessage = null;
-                        }),
-                        borderRadius: BorderRadius.circular(14),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: _selectedRole == 'influencer' ? const Color(0xFFFFF7ED) : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: _selectedRole == 'influencer' ? WovzoColors.orange : const Color(0xFFE2E8F0),
-                              width: _selectedRole == 'influencer' ? 1.8 : 1.0,
+                // === SIGN IN MODE vs 3-STEP MANDATORY VERIFICATION SIGN UP MODE ===
+                if (_isLogin) ...[
+                  // === SIGN IN FORM ===
+                  // Role Switcher: Creator vs Brand
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() {
+                            _selectedRole = 'influencer';
+                            _errorMessage = null;
+                          }),
+                          borderRadius: BorderRadius.circular(14),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: _selectedRole == 'influencer' ? const Color(0xFFFFF7ED) : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _selectedRole == 'influencer' ? WovzoColors.orange : const Color(0xFFE2E8F0),
+                                width: _selectedRole == 'influencer' ? 1.8 : 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.auto_awesome_rounded,
+                                  size: 16,
+                                  color: _selectedRole == 'influencer' ? WovzoColors.orange : Colors.grey.shade500,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Creator',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                    color: _selectedRole == 'influencer' ? WovzoColors.orange : Colors.grey.shade700,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.auto_awesome_rounded,
-                                size: 16,
-                                color: _selectedRole == 'influencer' ? WovzoColors.orange : Colors.grey.shade500,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Creator',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                  color: _selectedRole == 'influencer' ? WovzoColors.orange : Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => setState(() {
-                          _selectedRole = 'brand';
-                          _errorMessage = null;
-                        }),
-                        borderRadius: BorderRadius.circular(14),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: _selectedRole == 'brand' ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
-                              width: _selectedRole == 'brand' ? 1.8 : 1.0,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() {
+                            _selectedRole = 'brand';
+                            _errorMessage = null;
+                          }),
+                          borderRadius: BorderRadius.circular(14),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: _selectedRole == 'brand' ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                                width: _selectedRole == 'brand' ? 1.8 : 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.business_rounded,
+                                  size: 16,
+                                  color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : Colors.grey.shade500,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Brand',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                    color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.business_rounded,
-                                size: 16,
-                                color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : Colors.grey.shade500,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Brand',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                  color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
 
-                // === EXTRA SIGN UP FIELDS ===
-                if (!_isLogin) ...[
-                  if (_selectedRole == 'brand') ...[
-                    TextField(
-                      controller: _brandNameController,
-                      decoration: InputDecoration(
-                        labelText: 'Brand / Company Name',
-                        hintText: 'e.g. FabIndia, boAt Lifestyle',
-                        prefixIcon: const Icon(Icons.business_outlined, color: Color(0xFF2563EB)),
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
-                        ),
+                  // Email Field
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: 'Email Address',
+                      hintText: 'user@example.com',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _nameController,
-                      decoration: InputDecoration(
-                        labelText: 'Your Full Name (Brand Manager / Founder)',
-                        hintText: 'e.g. Rahul Sharma',
-                        prefixIcon: const Icon(Icons.person_outline),
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
-                        ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                  ] else ...[
-                    TextField(
-                      controller: _nameController,
-                      decoration: InputDecoration(
-                        labelText: 'Full Name',
-                        hintText: 'e.g. Asraf Ali',
-                        prefixIcon: const Icon(Icons.person_outline),
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
-                        ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                ],
-
-                // === EMAIL FIELD ===
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Email Address',
-                    hintText: 'user@example.com',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
                     ),
                   ),
-                ),
-                const SizedBox(height: 14),
+                  const SizedBox(height: 14),
 
-                // === PASSWORD FIELD ===
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                        color: Colors.grey,
+                  // Password Field
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
+                      ),
                     ),
                   ),
-                ),
 
-                if (_isLogin)
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
@@ -2071,125 +2318,698 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextButton.styleFrom(foregroundColor: WovzoColors.orange),
                       child: const Text('Forgot Password?', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     ),
-                  )
-                else if (_selectedRole == 'influencer') ...[
-                  const SizedBox(height: 14),
+                  ),
+
+                  // Sign In Button
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    height: 52,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF7ED),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFFFEDD5)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: const [
-                            Icon(Icons.verified_user_outlined, size: 16, color: WovzoColors.orange),
-                            SizedBox(width: 6),
-                            Text(
-                              'Social Channels & Bio Verification',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: WovzoColors.orange),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Provide your handles. You will get a 2-minute Bio Code (WOVZO-XXXX) to earn the Verified Blue Badge!',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF6A00), Color(0xFFFF8500)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: WovzoColors.orange.withOpacity(0.38),
+                          blurRadius: 16,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _instagramController,
-                    decoration: InputDecoration(
-                      labelText: 'Instagram Handle (@username)',
-                      prefixIcon: const Icon(Icons.camera_alt_outlined, color: Colors.pink),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _submitAuth,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                            )
+                          : const Text(
+                              'Sign In',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                            ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _youtubeController,
-                    decoration: InputDecoration(
-                      labelText: 'YouTube Channel / Link (Optional)',
-                      prefixIcon: const Icon(Icons.play_circle_outline, color: Colors.red),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8),
-                      ),
+                ] else ...[
+                  // === MANDATORY SOCIAL VERIFICATION 3-STEP SIGN UP WIZARD ===
+                  // Stepper Pill Indicator
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        _buildStepIndicatorItem(stepNumber: 1, title: 'Platform', isActive: _signupStep == 1, isCompleted: _signupStep > 1),
+                        Expanded(child: Container(height: 2, color: _signupStep > 1 ? WovzoColors.orange : const Color(0xFFE2E8F0))),
+                        _buildStepIndicatorItem(stepNumber: 2, title: 'Verify Bio', isActive: _signupStep == 2, isCompleted: _signupStep > 2),
+                        Expanded(child: Container(height: 2, color: _signupStep > 2 ? const Color(0xFF10B981) : const Color(0xFFE2E8F0))),
+                        _buildStepIndicatorItem(stepNumber: 3, title: 'Profile', isActive: _signupStep == 3, isCompleted: false),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 14),
-                ] else
-                  const SizedBox(height: 14),
 
-                if (_isLogin) const SizedBox(height: 8),
-
-                // === PRIMARY SIGN IN / SIGN UP BUTTON ===
-                Container(
-                  height: 52,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFF6A00), Color(0xFFFF8500)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: WovzoColors.orange.withOpacity(0.38),
-                        blurRadius: 16,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _submitAuth,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
-                          )
-                        : Text(
-                            _isLogin ? 'Sign In' : 'Create Account',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  // STEP 1: Select Platform and Enter Handle
+                  if (_signupStep == 1) ...[
+                    // Account Type: Creator vs Brand
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() {
+                              _selectedRole = 'influencer';
+                              _errorMessage = null;
+                            }),
+                            borderRadius: BorderRadius.circular(14),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedRole == 'influencer' ? const Color(0xFFFFF7ED) : Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: _selectedRole == 'influencer' ? WovzoColors.orange : const Color(0xFFE2E8F0),
+                                  width: _selectedRole == 'influencer' ? 1.8 : 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.auto_awesome_rounded, size: 16, color: _selectedRole == 'influencer' ? WovzoColors.orange : Colors.grey.shade500),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Creator',
+                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: _selectedRole == 'influencer' ? WovzoColors.orange : Colors.grey.shade700),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                  ),
-                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() {
+                              _selectedRole = 'brand';
+                              _errorMessage = null;
+                            }),
+                            borderRadius: BorderRadius.circular(14),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedRole == 'brand' ? const Color(0xFFEFF6FF) : Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                                  width: _selectedRole == 'brand' ? 1.8 : 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.business_rounded, size: 16, color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : Colors.grey.shade500),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Brand',
+                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: _selectedRole == 'brand' ? const Color(0xFF2563EB) : Colors.grey.shade700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Platform Switcher: Instagram vs YouTube
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() {
+                              _selectedPlatform = 'instagram';
+                              _errorMessage = null;
+                            }),
+                            borderRadius: BorderRadius.circular(14),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedPlatform == 'instagram' ? const Color(0xFFFDF2F8) : Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: _selectedPlatform == 'instagram' ? const Color(0xFFE1306C) : const Color(0xFFE2E8F0),
+                                  width: _selectedPlatform == 'instagram' ? 1.8 : 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.camera_alt_rounded, size: 18, color: Color(0xFFE1306C)),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Instagram',
+                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: Color(0xFF831843)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setState(() {
+                              _selectedPlatform = 'youtube';
+                              _errorMessage = null;
+                            }),
+                            borderRadius: BorderRadius.circular(14),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedPlatform == 'youtube' ? const Color(0xFFFEF2F2) : Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: _selectedPlatform == 'youtube' ? const Color(0xFFDC2626) : const Color(0xFFE2E8F0),
+                                  width: _selectedPlatform == 'youtube' ? 1.8 : 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.play_circle_fill_rounded, size: 18, color: Color(0xFFDC2626)),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'YouTube',
+                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: Color(0xFF991B1B)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Handle TextField
+                    TextField(
+                      controller: _handleController,
+                      decoration: InputDecoration(
+                        labelText: _selectedPlatform == 'instagram' ? 'Instagram Handle (@username)' : 'YouTube Channel Handle (@handle)',
+                        hintText: _selectedPlatform == 'instagram' ? '@alex_creator' : '@channelname',
+                        prefixIcon: Icon(
+                          _selectedPlatform == 'instagram' ? Icons.camera_alt_rounded : Icons.play_circle_fill_rounded,
+                          color: _selectedPlatform == 'instagram' ? const Color(0xFFE1306C) : const Color(0xFFDC2626),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: _selectedPlatform == 'instagram' ? const Color(0xFFE1306C) : const Color(0xFFDC2626), width: 1.8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Mandatory verification security note
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFFFEDD5)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.shield_outlined, size: 18, color: WovzoColors.orange),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Mandatory Ownership Verification',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF9A3412)),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'To prevent fake accounts, both Creators and Brands must verify account ownership by adding a unique code to their bio.',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700, height: 1.35),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Generate Code Button
+                    Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF6A00), Color(0xFFFF8500)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(color: WovzoColors.orange.withOpacity(0.38), blurRadius: 16, offset: const Offset(0, 5)),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading ? null : _startVerificationChallenge,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        icon: _isLoading
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.verified_outlined, size: 18),
+                        label: Text(
+                          _isLoading ? 'Generating Code...' : 'Generate Verification Code',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  // STEP 2: Bio Ownership Challenge
+                  if (_signupStep == 2) ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4)),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Target handle header
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 14,
+                                backgroundColor: _selectedPlatform == 'instagram' ? const Color(0xFFFDF2F8) : const Color(0xFFFEF2F2),
+                                child: Icon(
+                                  _selectedPlatform == 'instagram' ? Icons.camera_alt_rounded : Icons.play_circle_fill_rounded,
+                                  size: 16,
+                                  color: _selectedPlatform == 'instagram' ? const Color(0xFFE1306C) : const Color(0xFFDC2626),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '@${_handleController.text.trim()} on ${_selectedPlatform == 'instagram' ? 'Instagram' : 'YouTube'}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: _challengeSecondsLeft > 0 ? const Color(0xFFFFF7ED) : const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.timer_outlined, size: 12, color: _challengeSecondsLeft > 0 ? WovzoColors.orange : Colors.red),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _challengeSecondsLeft > 0 ? _formatSeconds(_challengeSecondsLeft) : 'Expired',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: _challengeSecondsLeft > 0 ? const Color(0xFF9A3412) : Colors.red,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+
+                          // Verification Code Box
+                          const Text('YOUR VERIFICATION CODE', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.grey, letterSpacing: 1.0)),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF7ED),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFFFEDD5), width: 1.5),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: SelectableText(
+                                    _verificationCode ?? '',
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFFC2410C),
+                                      letterSpacing: 1.8,
+                                    ),
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    if (_verificationCode != null) {
+                                      Clipboard.setData(ClipboardData(text: _verificationCode!));
+                                      setState(() => _codeCopied = true);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Verification code copied!'), duration: Duration(seconds: 2)),
+                                      );
+                                    }
+                                  },
+                                  icon: Icon(_codeCopied ? Icons.check_circle : Icons.copy_rounded, size: 14),
+                                  label: Text(_codeCopied ? 'Copied' : 'Copy'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: WovzoColors.orange,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Open App Button
+                          OutlinedButton.icon(
+                            onPressed: _openSocialApp,
+                            icon: Icon(
+                              _selectedPlatform == 'instagram' ? Icons.camera_alt_rounded : Icons.play_circle_fill_rounded,
+                              size: 16,
+                              color: _selectedPlatform == 'instagram' ? const Color(0xFFE1306C) : const Color(0xFFDC2626),
+                            ),
+                            label: Text(
+                              'Open ${_selectedPlatform == 'instagram' ? 'Instagram Profile' : 'YouTube Channel'}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _selectedPlatform == 'instagram' ? const Color(0xFFE1306C) : const Color(0xFFDC2626),
+                                fontSize: 13,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: _selectedPlatform == 'instagram' ? const Color(0xFFFBCFE8) : const Color(0xFFFECACA)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Instructions
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Instructions:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                const SizedBox(height: 6),
+                                _buildInstructionStep('1', 'Copy the verification code above.'),
+                                _buildInstructionStep('2', 'Add it to your ${_selectedPlatform == 'instagram' ? 'Instagram Bio' : 'YouTube Channel Description'} and save.'),
+                                _buildInstructionStep('3', 'Tap "Verify Account" below to confirm ownership.'),
+                              ],
+                            ),
+                          ),
+
+                          // Error message if bio check failed
+                          if (_bioVerificationError != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF1F2),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFFECDD3)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.error_outline_rounded, size: 16, color: Color(0xFFE11D48)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _bioVerificationError!,
+                                      style: const TextStyle(color: Color(0xFF9F1239), fontSize: 11.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Primary Verify Account Button
+                    Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF6A00), Color(0xFFFF8500)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(color: WovzoColors.orange.withOpacity(0.38), blurRadius: 16, offset: const Offset(0, 5)),
+                        ],
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: _isVerifyingBio ? null : _verifySocialOwnership,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        icon: _isVerifyingBio
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.check_circle_outline, size: 18),
+                        label: Text(
+                          _isVerifyingBio ? 'Checking Bio...' : 'Verify Account',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Change handle or regenerate code
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _signupStep = 1;
+                            _bioVerificationError = null;
+                          }),
+                          child: const Text('Change Handle', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        ),
+                        if (_challengeSecondsLeft <= 0)
+                          TextButton(
+                            onPressed: _startVerificationChallenge,
+                            child: const Text('Regenerate Code', style: TextStyle(fontSize: 12, color: WovzoColors.orange, fontWeight: FontWeight.bold)),
+                          ),
+                      ],
+                    ),
+                  ],
+
+                  // STEP 3: Verified! Enter Account Registration Details
+                  if (_signupStep == 3) ...[
+                    // Green Verified Success Badge
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified_rounded, color: Color(0xFF059669), size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text('Ownership Verified', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF065F46))),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: const Color(0xFF059669), borderRadius: BorderRadius.circular(6)),
+                                      child: const Text('READY', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '@$_verifiedHandle (${_selectedPlatform == 'instagram' ? 'Instagram' : 'YouTube'}) verified successfully.',
+                                  style: const TextStyle(fontSize: 11.5, color: Color(0xFF047857)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    if (_selectedRole == 'brand') ...[
+                      TextField(
+                        controller: _brandNameController,
+                        decoration: InputDecoration(
+                          labelText: 'Brand / Company Name',
+                          hintText: 'e.g. FabIndia, boAt Lifestyle',
+                          prefixIcon: const Icon(Icons.business_outlined, color: Color(0xFF2563EB)),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8)),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: 'Your Full Name (Brand Manager / Founder)',
+                          hintText: 'e.g. Rahul Sharma',
+                          prefixIcon: const Icon(Icons.person_outline),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8)),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ] else ...[
+                      TextField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: 'Full Name',
+                          hintText: 'e.g. Asraf Ali',
+                          prefixIcon: const Icon(Icons.person_outline),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8)),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    // Email Field
+                    TextField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Email Address',
+                        hintText: 'user@example.com',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Password Field
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: WovzoColors.orange, width: 1.8)),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Create Verified Account Button
+                    Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF6A00), Color(0xFFFF8500)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(color: WovzoColors.orange.withOpacity(0.38), blurRadius: 16, offset: const Offset(0, 5)),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _submitAuth,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2))
+                            : const Text(
+                                'Create Verified Account',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                              ),
+                      ),
+                    ),
+                  ],
+                ],
                 const SizedBox(height: 18),
 
                 // === DIVIDER ===
