@@ -1081,6 +1081,15 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    // PERSISTENCE: If an active challenge already exists for this handle, do not mutate code!
+    if (_verificationCode != null && _challengeSecondsLeft > 0 && _handleController.text.trim().toLowerCase() == _verifiedHandle) {
+      setState(() {
+        _signupStep = 2;
+        _bioVerificationError = null;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -2826,7 +2835,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                             : const Icon(Icons.check_circle_outline, size: 18),
                         label: Text(
-                          _isVerifyingBio ? 'Checking Bio...' : 'Verify Account',
+                          _isVerifyingBio
+                              ? 'Checking Bio...'
+                              : (_bioVerificationError != null ? 'Retry Verification' : 'Verify Account'),
                           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
                         ),
                       ),
