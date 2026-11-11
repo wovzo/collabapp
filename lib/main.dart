@@ -322,26 +322,22 @@ class WovzoLogo extends StatelessWidget {
         width: h,
         height: h,
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
           borderRadius: BorderRadius.circular(h * 0.28),
-          border: Border.all(
-            color: WovzoColors.orange.withOpacity(0.35),
-            width: 1.5,
-          ),
           boxShadow: [
             BoxShadow(
-              color: WovzoColors.orange.withOpacity(0.25),
+              color: WovzoColors.orange.withOpacity(0.35),
               blurRadius: 18,
               offset: const Offset(0, 6),
             ),
           ],
         ),
-        padding: EdgeInsets.all(h * 0.18),
-        child: const CustomPaint(
-          painter: WovzoGlyphPainter(
-            leftWingColor: Color(0xFFFF6A00),
-            rightWingColor: Colors.white,
-            centerColor: Color(0xFFFF8A00),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(h * 0.28),
+          child: Image.asset(
+            'assets/images/wovzo_logo.png',
+            width: h,
+            height: h,
+            fit: BoxFit.cover,
           ),
         ),
       );
@@ -351,14 +347,19 @@ class WovzoLogo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
+        Container(
           width: h,
           height: h,
-          child: CustomPaint(
-            painter: WovzoGlyphPainter(
-              leftWingColor: const Color(0xFFFF6A00),
-              rightWingColor: isDark ? Colors.white : const Color(0xFF0F172A),
-              centerColor: const Color(0xFFFF8A00),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(h * 0.26),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(h * 0.26),
+            child: Image.asset(
+              'assets/images/wovzo_logo.png',
+              width: h,
+              height: h,
+              fit: BoxFit.cover,
             ),
           ),
         ),
@@ -859,6 +860,28 @@ class _SplashScreenState extends State<SplashScreen>
                           opacity: _logoFade.value,
                           child: Column(
                             children: [
+                              Container(
+                                width: 56,
+                                height: 56,
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: WovzoColors.orange.withOpacity(0.35),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Image.asset(
+                                    'assets/images/wovzo_logo.png',
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
                               // Wordmark
                               RichText(
                                 text: const TextSpan(
@@ -1706,33 +1729,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 // === TOP LUXURY BRANDING ===
                 Center(
                   child: Container(
-                    width: 72,
-                    height: 72,
+                    width: 86,
+                    height: 86,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: WovzoColors.orange.withOpacity(0.4),
-                        width: 1.5,
-                      ),
+                      borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: WovzoColors.orange.withOpacity(0.25),
-                          blurRadius: 20,
-                          offset: const Offset(0, 6),
+                          color: WovzoColors.orange.withOpacity(0.38),
+                          blurRadius: 22,
+                          offset: const Offset(0, 8),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.12),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    padding: const EdgeInsets.all(14),
-                    child: const CustomPaint(
-                      painter: WovzoGlyphPainter(
-                        leftWingColor: Color(0xFFFF6A00),
-                        rightWingColor: Colors.white,
-                        centerColor: Color(0xFFFF8A00),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Image.asset(
+                        'assets/images/wovzo_logo.png',
+                        width: 86,
+                        height: 86,
+                        fit: BoxFit.cover,
                       ),
                     ),
                   ),
