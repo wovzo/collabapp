@@ -1121,6 +1121,7 @@ class _LoginScreenState extends State<LoginScreen> {
     String? code;
     final endpoints = [
       'http://localhost:3001/create_challenge?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&account_type=$normRole',
+      'http://192.168.2.69:3001/create_challenge?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&account_type=$normRole',
       'http://10.0.2.2:3001/create_challenge?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&account_type=$normRole',
       'https://collab.wovzo.com/verify_bio.php?action=create_challenge&platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&account_type=$normRole',
     ];
@@ -1170,6 +1171,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final endpoints = [
       'http://localhost:3001/verify_bio?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&code=$_verificationCode&challenge_id=${_challengeId ?? ""}',
+      'http://192.168.2.69:3001/verify_bio?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&code=$_verificationCode&challenge_id=${_challengeId ?? ""}',
       'http://10.0.2.2:3001/verify_bio?platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&code=$_verificationCode&challenge_id=${_challengeId ?? ""}',
       'https://collab.wovzo.com/verify_bio.php?action=verify_ownership&platform=$_selectedPlatform&handle=${Uri.encodeComponent(cleanHandle)}&code=$_verificationCode&challenge_id=${_challengeId ?? ""}',
     ];
@@ -1229,6 +1231,60 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       debugPrint('Could not launch social app: $e');
     }
+  }
+
+  // Open Meta OAuth Verification in External Browser
+  Future<void> _openMetaOAuth() async {
+    final cleanHandle = _handleController.text.trim().replaceAll('@', '').toLowerCase();
+    final normRole = (_selectedRole.toLowerCase() == 'creator' || _selectedRole.toLowerCase() == 'influencer') ? 'creator' : 'brand';
+    final urlStr = 'http://192.168.2.69:3001/auth/instagram/start?challenge_id=${_challengeId ?? ""}&handle=${Uri.encodeComponent(cleanHandle)}&account_type=$normRole';
+    try {
+      final uri = Uri.parse(urlStr);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch Meta OAuth: $e');
+    }
+  }
+
+  // Check if Meta OAuth authorization completed
+  Future<void> _checkMetaOAuthStatus() async {
+    final cleanHandle = _handleController.text.trim().replaceAll('@', '').toLowerCase();
+    final urls = [
+      'http://localhost:3001/check_challenge?challenge_id=${_challengeId ?? ""}&handle=${Uri.encodeComponent(cleanHandle)}',
+      'http://192.168.2.69:3001/check_challenge?challenge_id=${_challengeId ?? ""}&handle=${Uri.encodeComponent(cleanHandle)}',
+    ];
+
+    setState(() {
+      _isVerifyingBio = true;
+      _bioVerificationError = null;
+    });
+
+    for (final u in urls) {
+      try {
+        final res = await http.get(Uri.parse(u)).timeout(const Duration(seconds: 4));
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          if (data['verified'] == true) {
+            setState(() {
+              _isSocialVerified = true;
+              _verifiedHandle = cleanHandle;
+              _verifiedPlatformAccountId = data['platform_account_id']?.toString() ?? 'IG_$cleanHandle';
+              _signupStep = 3;
+              _isVerifyingBio = false;
+            });
+            _challengeTimer?.cancel();
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
+    setState(() {
+      _isVerifyingBio = false;
+      _bioVerificationError = 'Meta authorization not completed yet. Please complete the browser window authorization first.';
+    });
   }
 
 
@@ -2842,6 +2898,44 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+
+                    if (_selectedPlatform == 'instagram') ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(color: const Color(0xFFDD2A7B).withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4)),
+                          ],
+                        ),
+                        child: ElevatedButton.icon(
+                          onPressed: _openMetaOAuth,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          icon: const Icon(Icons.verified_user_outlined, size: 18),
+                          label: const Text(
+                            'Connect with Instagram (Meta OAuth)',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextButton.icon(
+                        onPressed: _checkMetaOAuthStatus,
+                        icon: const Icon(Icons.refresh, size: 14, color: WovzoColors.orange),
+                        label: const Text("I've Authorized via Meta (Check Status)", style: TextStyle(fontSize: 12, color: WovzoColors.orange, fontWeight: FontWeight.w600)),
+                      ),
+                    ],
                     const SizedBox(height: 10),
 
                     // Change handle or regenerate code
