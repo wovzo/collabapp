@@ -496,7 +496,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     // Brand slides from left
-    _brandSlide = Tween<double>(begin: -55.0, end: 0.0).animate(
+    _brandSlide = Tween<double>(begin: -20.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.08, 0.5, curve: Curves.easeOutCubic),
@@ -504,7 +504,7 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     // Creator slides from right
-    _creatorSlide = Tween<double>(begin: 55.0, end: 0.0).animate(
+    _creatorSlide = Tween<double>(begin: 20.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.08, 0.5, curve: Curves.easeOutCubic),
@@ -683,154 +683,157 @@ class _SplashScreenState extends State<SplashScreen>
 
                         // === ELEGANT BRAND & CREATOR COLLABORATION BRIDGE ===
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              // Left: Brand Node (slides smoothly inward)
-                              Opacity(
-                                opacity: _cardFade.value,
-                                child: Transform.translate(
-                                  offset: Offset(_brandSlide.value, 0),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0F172A),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: const Color(0xFF38BDF8).withOpacity(0.4),
-                                        width: 1.2,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFF38BDF8).withOpacity(0.18),
-                                          blurRadius: 16,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Left: Brand Node (slides smoothly inward)
+                                Opacity(
+                                  opacity: _cardFade.value,
+                                  child: Transform.translate(
+                                    offset: Offset(_brandSlide.value, 0),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F172A),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: const Color(0xFF38BDF8).withOpacity(0.4),
+                                          width: 1.2,
                                         ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          width: 32,
-                                          height: 32,
-                                          decoration: const BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            gradient: LinearGradient(
-                                              colors: [Color(0xFF1D4ED8), Color(0xFF38BDF8)],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF38BDF8).withOpacity(0.18),
+                                            blurRadius: 14,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            width: 28,
+                                            height: 28,
+                                            decoration: const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              gradient: LinearGradient(
+                                                colors: [Color(0xFF1D4ED8), Color(0xFF38BDF8)],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
+                                            ),
+                                            child: const Icon(
+                                              Icons.business_rounded,
+                                              color: Colors.white,
+                                              size: 15,
                                             ),
                                           ),
-                                          child: const Icon(
-                                            Icons.business_rounded,
-                                            color: Colors.white,
-                                            size: 17,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        const Text(
-                                          'BRAND',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 1.2,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              // Center Connector & Handshake
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                                child: Transform.scale(
-                                  scale: _centerScale.value,
-                                  child: Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: const Color(0xFF111827),
-                                      border: Border.all(color: WovzoColors.orange, width: 2),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: WovzoColors.orange.withOpacity(0.55),
-                                          blurRadius: 18,
-                                          spreadRadius: 2,
-                                        ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.handshake_rounded,
-                                      color: WovzoColors.orange,
-                                      size: 22,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              // Right: Creator Node (slides smoothly inward)
-                              Opacity(
-                                opacity: _cardFade.value,
-                                child: Transform.translate(
-                                  offset: Offset(_creatorSlide.value, 0),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0F172A),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: WovzoColors.orange.withOpacity(0.4),
-                                        width: 1.2,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: WovzoColors.orange.withOpacity(0.18),
-                                          blurRadius: 16,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Text(
-                                          'CREATOR',
-                                          style: TextStyle(
-                                            color: WovzoColors.orange,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 1.2,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          width: 32,
-                                          height: 32,
-                                          decoration: const BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            gradient: LinearGradient(
-                                              colors: [Color(0xFFFF6A00), Color(0xFFFFAA00)],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
+                                          const SizedBox(width: 7),
+                                          const Text(
+                                            'BRAND',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 1.2,
                                             ),
                                           ),
-                                          child: const Icon(
-                                            Icons.auto_awesome_rounded,
-                                            color: Colors.white,
-                                            size: 17,
-                                          ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+
+                                // Center Connector & Handshake
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  child: Transform.scale(
+                                    scale: _centerScale.value,
+                                    child: Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: const Color(0xFF111827),
+                                        border: Border.all(color: WovzoColors.orange, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: WovzoColors.orange.withOpacity(0.55),
+                                            blurRadius: 16,
+                                            spreadRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.handshake_rounded,
+                                        color: WovzoColors.orange,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                // Right: Creator Node (slides smoothly inward)
+                                Opacity(
+                                  opacity: _cardFade.value,
+                                  child: Transform.translate(
+                                    offset: Offset(_creatorSlide.value, 0),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F172A),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: WovzoColors.orange.withOpacity(0.4),
+                                          width: 1.2,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: WovzoColors.orange.withOpacity(0.18),
+                                            blurRadius: 14,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text(
+                                            'CREATOR',
+                                            style: TextStyle(
+                                              color: WovzoColors.orange,
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 1.2,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 7),
+                                          Container(
+                                            width: 28,
+                                            height: 28,
+                                            decoration: const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              gradient: LinearGradient(
+                                                colors: [Color(0xFFFF6A00), Color(0xFFFFAA00)],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
+                                            ),
+                                            child: const Icon(
+                                              Icons.auto_awesome_rounded,
+                                              color: Colors.white,
+                                              size: 15,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
 
