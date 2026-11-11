@@ -679,173 +679,154 @@ class _SplashScreenState extends State<SplashScreen>
                     opacity: _fadeAnimation.value,
                     child: Column(
                       children: [
-                        const SizedBox(height: 20),
-                        // Top pill label
-                        Opacity(
-                          opacity: _taglineFade.value,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.06),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.1),
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: WovzoColors.orange,
-                                  ),
-                                ),
-                                const SizedBox(width: 7),
-                                const Text(
-                                  'WOVZO COLLAB',
-                                  style: TextStyle(
-                                    color: Colors.white60,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 2.0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const Spacer(flex: 2),
+                        const Spacer(flex: 3),
 
-                        // === MAIN HERO ROW ===
+                        // === ELEGANT BRAND & CREATOR COLLABORATION BRIDGE ===
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // BRAND card
+                              // Left: Brand Node (slides smoothly inward)
                               Opacity(
                                 opacity: _cardFade.value,
                                 child: Transform.translate(
                                   offset: Offset(_brandSlide.value, 0),
-                                  child: _buildPremiumCard(
-                                    icon: Icons.business_rounded,
-                                    label: 'BRAND',
-                                    sub: 'Campaigns\n& Deals',
-                                    gradientColors: const [Color(0xFF1D4ED8), Color(0xFF38BDF8)],
-                                    glowColor: const Color(0xFF38BDF8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: const Color(0xFF38BDF8).withOpacity(0.4),
+                                        width: 1.2,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF38BDF8).withOpacity(0.18),
+                                          blurRadius: 16,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: const BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: LinearGradient(
+                                              colors: [Color(0xFF1D4ED8), Color(0xFF38BDF8)],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.business_rounded,
+                                            color: Colors.white,
+                                            size: 17,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'BRAND',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
 
-                              // Shimmer connector + handshake center
-                              Expanded(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Shimmer line top
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(2),
-                                      child: SizedBox(
-                                        height: 2,
-                                        child: Stack(
-                                          children: [
-                                            Container(
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  colors: [
-                                                    const Color(0xFF38BDF8).withOpacity(0.3),
-                                                    WovzoColors.orange.withOpacity(0.3),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            FractionallySizedBox(
-                                              widthFactor: 0.4,
-                                              child: Transform.translate(
-                                                offset: Offset(_shimmerAnimation.value * 60, 0),
-                                                child: Container(
-                                                  decoration: BoxDecoration(
-                                                    gradient: LinearGradient(
-                                                      colors: [
-                                                        Colors.transparent,
-                                                        Colors.white.withOpacity(0.7),
-                                                        Colors.transparent,
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                              // Center Connector & Handshake
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                child: Transform.scale(
+                                  scale: _centerScale.value,
+                                  child: Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: const Color(0xFF111827),
+                                      border: Border.all(color: WovzoColors.orange, width: 2),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: WovzoColors.orange.withOpacity(0.55),
+                                          blurRadius: 18,
+                                          spreadRadius: 2,
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 10),
-
-                                    // Handshake center
-                                    Transform.scale(
-                                      scale: _centerScale.value,
-                                      child: Container(
-                                        width: 52,
-                                        height: 52,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: const Color(0xFF111827),
-                                          border: Border.all(color: WovzoColors.orange, width: 2),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: WovzoColors.orange.withOpacity(0.55),
-                                              blurRadius: 20,
-                                              spreadRadius: 2,
-                                            ),
-                                          ],
-                                        ),
-                                        child: const Icon(
-                                          Icons.handshake_rounded,
-                                          color: WovzoColors.orange,
-                                          size: 26,
-                                        ),
-                                      ),
+                                    child: const Icon(
+                                      Icons.handshake_rounded,
+                                      color: WovzoColors.orange,
+                                      size: 22,
                                     ),
-                                    const SizedBox(height: 10),
-
-                                    // Shimmer line bottom
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(2),
-                                      child: SizedBox(
-                                        height: 2,
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                WovzoColors.orange.withOpacity(0.3),
-                                                const Color(0xFF38BDF8).withOpacity(0.3),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
 
-                              // INFLUENCER card
+                              // Right: Creator Node (slides smoothly inward)
                               Opacity(
                                 opacity: _cardFade.value,
                                 child: Transform.translate(
                                   offset: Offset(_creatorSlide.value, 0),
-                                  child: _buildPremiumCard(
-                                    icon: Icons.auto_awesome_rounded,
-                                    label: 'INFLUENCER',
-                                    sub: 'Content\n& Reach',
-                                    gradientColors: const [Color(0xFFFF6A00), Color(0xFFFFAA00)],
-                                    glowColor: WovzoColors.orange,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: WovzoColors.orange.withOpacity(0.4),
+                                        width: 1.2,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: WovzoColors.orange.withOpacity(0.18),
+                                          blurRadius: 16,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          'CREATOR',
+                                          style: TextStyle(
+                                            color: WovzoColors.orange,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: const BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: LinearGradient(
+                                              colors: [Color(0xFFFF6A00), Color(0xFFFFAA00)],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.auto_awesome_rounded,
+                                            color: Colors.white,
+                                            size: 17,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -853,36 +834,41 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                         ),
 
-                        const SizedBox(height: 36),
+                        const SizedBox(height: 38),
 
-                        // Wovzo Logo + COLLAB badge
+                        // === OFFICIAL WOVZO LOGO & BRANDING ===
                         Opacity(
                           opacity: _logoFade.value,
                           child: Column(
                             children: [
                               Container(
-                                width: 56,
-                                height: 56,
-                                margin: const EdgeInsets.only(bottom: 12),
+                                width: 72,
+                                height: 72,
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: WovzoColors.orange.withOpacity(0.35),
-                                      blurRadius: 16,
-                                      offset: const Offset(0, 4),
+                                      color: WovzoColors.orange.withOpacity(0.4),
+                                      blurRadius: 22,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.3),
+                                      blurRadius: 10,
                                     ),
                                   ],
                                 ),
                                 child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(20),
                                   child: Image.asset(
                                     'assets/images/wovzo_logo.png',
                                     fit: BoxFit.cover,
                                   ),
                                 ),
                               ),
-                              // Wordmark
+                              const SizedBox(height: 18),
+
+                              // Wordmark: WOVZO COLLAB
                               RichText(
                                 text: const TextSpan(
                                   children: [
@@ -891,7 +877,7 @@ class _SplashScreenState extends State<SplashScreen>
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w900,
-                                        fontSize: 26,
+                                        fontSize: 28,
                                         letterSpacing: 2.5,
                                       ),
                                     ),
@@ -900,92 +886,42 @@ class _SplashScreenState extends State<SplashScreen>
                                       style: TextStyle(
                                         color: WovzoColors.orange,
                                         fontWeight: FontWeight.w900,
-                                        fontSize: 26,
+                                        fontSize: 28,
                                         letterSpacing: 2.5,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              // Brand ⟷ Influencer badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      const Color(0xFF38BDF8).withOpacity(0.1),
-                                      WovzoColors.orange.withOpacity(0.15),
-                                    ],
+                              const SizedBox(height: 10),
+
+                              // Tagline
+                              Opacity(
+                                opacity: _taglineFade.value,
+                                child: Text(
+                                  'Where Brands Meet Top Creators',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.55),
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.4,
                                   ),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: WovzoColors.orange.withOpacity(0.45),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.business_rounded, size: 11, color: Color(0xFF38BDF8)),
-                                    const SizedBox(width: 6),
-                                    const Text(
-                                      'BRAND',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 7),
-                                      child: Icon(Icons.handshake_rounded, size: 12, color: WovzoColors.orange),
-                                    ),
-                                    Text(
-                                      'INFLUENCER',
-                                      style: TextStyle(
-                                        color: WovzoColors.orange,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    const Icon(Icons.auto_awesome_rounded, size: 11, color: WovzoColors.orange),
-                                  ],
                                 ),
                               ),
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 14),
-
-                        // Tagline
-                        Opacity(
-                          opacity: _taglineFade.value,
-                          child: Text(
-                            'Where Brands Meet Top Creators',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.55),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-
-                        const Spacer(flex: 2),
+                        const Spacer(flex: 3),
 
                         // Loader
                         Opacity(
                           opacity: _loaderFade.value,
                           child: SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 22,
+                            height: 22,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2.0,
+                              strokeWidth: 2.2,
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 WovzoColors.orange.withOpacity(0.85),
                               ),
@@ -1000,13 +936,13 @@ class _SplashScreenState extends State<SplashScreen>
                           child: Text(
                             'v1.0.0 • Powered by Wovzo',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.25),
-                              fontSize: 10.5,
-                              letterSpacing: 0.5,
+                              color: Colors.white.withOpacity(0.28),
+                              fontSize: 11,
+                              letterSpacing: 0.6,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 18),
                       ],
                     ),
                   ),
@@ -1015,76 +951,6 @@ class _SplashScreenState extends State<SplashScreen>
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildPremiumCard({
-    required IconData icon,
-    required String label,
-    required String sub,
-    required List<Color> gradientColors,
-    required Color glowColor,
-  }) {
-    return Container(
-      width: 100,
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111827).withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: glowColor.withOpacity(0.35), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: glowColor.withOpacity(0.18),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: gradientColors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: glowColor.withOpacity(0.45),
-                  blurRadius: 14,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: Icon(icon, color: Colors.white, size: 26),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: 11,
-              letterSpacing: 1.4,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            sub,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
-              fontSize: 9.5,
-              height: 1.4,
-            ),
-          ),
-        ],
       ),
     );
   }
