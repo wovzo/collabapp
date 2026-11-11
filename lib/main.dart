@@ -1729,35 +1729,35 @@ class _LoginScreenState extends State<LoginScreen> {
                 // === TOP LUXURY BRANDING ===
                 Center(
                   child: Container(
-                    width: 86,
-                    height: 86,
+                    width: 62,
+                    height: 62,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(18),
                       boxShadow: [
                         BoxShadow(
-                          color: WovzoColors.orange.withOpacity(0.38),
-                          blurRadius: 22,
-                          offset: const Offset(0, 8),
+                          color: WovzoColors.orange.withOpacity(0.35),
+                          blurRadius: 16,
+                          offset: const Offset(0, 5),
                         ),
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
-                          blurRadius: 10,
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(18),
                       child: Image.asset(
                         'assets/images/wovzo_logo.png',
-                        width: 86,
-                        height: 86,
+                        width: 62,
+                        height: 62,
                         fit: BoxFit.cover,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
 
                 RichText(
                   textAlign: TextAlign.center,
@@ -1768,8 +1768,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: TextStyle(
                           color: WovzoColors.deepBlack,
                           fontWeight: FontWeight.w900,
-                          fontSize: 24,
-                          letterSpacing: 2.2,
+                          fontSize: 22,
+                          letterSpacing: 2.0,
                         ),
                       ),
                       TextSpan(
@@ -1777,8 +1777,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: TextStyle(
                           color: WovzoColors.orange,
                           fontWeight: FontWeight.w900,
-                          fontSize: 24,
-                          letterSpacing: 2.2,
+                          fontSize: 22,
+                          letterSpacing: 2.0,
                         ),
                       ),
                     ],
